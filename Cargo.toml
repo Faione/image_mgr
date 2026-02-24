@@ -6,10 +6,10 @@ description = "系统镜像分发服务"
 
 [dependencies]
 # Web 框架 - 仅启用必要特性
-axum = { version = "0.7", default-features = false, features = ["json", "macros", "query", "tokio", "http1"] }
+axum = { version = "0.7", default-features = false, features = ["json", "macros", "multipart", "query", "tokio", "http1"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "time", "sync", "net", "process", "signal"] }
 tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.5", features = ["cors", "fs"] }
+tower-http = { version = "0.5", features = ["cors", "fs", "limit"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }

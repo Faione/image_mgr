@@ -12,6 +12,7 @@
     <nav>
       <a href="/" class="nav-link active">镜像列表</a>
       <a href="/builds" class="nav-link">构建管理</a>
+      <a href="/admin" class="nav-link">管理</a>
     </nav>
   </header>
 
@@ -34,6 +35,33 @@
       </div>
       <div id="loadMoreWrap" class="load-more-wrap hidden">
         <button id="loadMoreBtn" class="load-more-btn">加载更多</button>
+      </div>
+    </section>
+  </main>
+
+  <main id="admin-app" class="hidden">
+    <section class="admin-section">
+      <h2>超级管理员</h2>
+      <div id="adminLogin" class="admin-login">
+        <p class="hint">在 config.toml 中配置 admin_token 后，在此输入令牌以管理镜像（删除/上传）。</p>
+        <div class="form-row">
+          <label>管理员令牌</label>
+          <input type="password" id="adminTokenInput" placeholder="admin_token">
+        </div>
+        <button type="button" id="adminTokenBtn">验证并进入</button>
+      </div>
+      <div id="adminPanel" class="hidden">
+        <p class="hint">已登录 · <button type="button" id="adminLogout" class="text-btn">退出</button></p>
+        <h3>上传镜像</h3>
+        <p class="hint">将保存到当日目录 uploads/YYYY-MM-DD/，重名自动加 _1、_2 后缀</p>
+        <form id="adminUploadForm">
+          <div class="form-row">
+            <input type="file" id="adminFileInput" multiple>
+          </div>
+          <button type="submit">上传</button>
+        </form>
+        <h3>已有镜像（可删除）</h3>
+        <div id="adminImagesList" class="images-list"></div>
       </div>
     </section>
   </main>

@@ -9,6 +9,9 @@ pub struct Config {
     pub uploads_dir: PathBuf,
     #[serde(default)]
     pub builds: Vec<BuildConfig>,
+    /// 超级管理员令牌，设置后启用管理功能（删除/上传镜像）
+    #[serde(default)]
+    pub admin_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

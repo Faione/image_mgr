@@ -3,12 +3,13 @@ mod build;
 mod config;
 mod storage;
 
-use axum::{routing::get, Router};
+use axum::{routing::{delete, get, post}, Router};
 use clap::Parser;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
+use tower_http::limit::RequestBodyLimitLayer;
 
 #[derive(Parser, Debug)]
 #[command(name = "image-dist", about = "系统镜像分发服务")]
@@ -63,15 +64,21 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(api::index))
         .route("/builds", get(api::index))
+        .route("/admin", get(api::index))
         .route("/api/dates", get(api::list_dates))
         .route("/api/images", get(api::list_images))
         .route("/api/images/all", get(api::list_all_images))
         .route("/api/download/:date/:filename", get(api::download))
         .route("/api/builds", get(api::list_builds).post(api::create_build))
+        .route("/api/admin/status", get(api::admin_status))
+        .route("/api/admin/verify", get(api::admin_verify))
+        .route("/api/admin/image/:date/:filename", delete(api::admin_delete_image))
+        .route("/api/admin/upload", post(api::admin_upload))
         .nest_service(
             "/static",
             tower_http::services::ServeDir::new(frontend_dir),
         )
+        .layer(RequestBodyLimitLayer::new(256 * 1024 * 1024)) // 256MB for upload
         .layer(CorsLayer::permissive())
         .with_state(api::AppState { config, storage });
 

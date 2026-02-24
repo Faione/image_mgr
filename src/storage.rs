@@ -89,6 +89,43 @@ impl Storage {
         self.root.join(date).join(filename)
     }
 
+    /// 删除指定日期的镜像文件
+    pub async fn delete_image(&self, date: &str, filename: &str) -> anyhow::Result<()> {
+        if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+            anyhow::bail!("非法文件名");
+        }
+        let path = self.file_path(date, filename);
+        if path.exists() {
+            fs::remove_file(&path).await?;
+        }
+        Ok(())
+    }
+
+    /// 保存上传的文件到指定日期目录，若重名则自动加 _1、_2 等后缀
+    pub async fn save_uploaded(&self, date: &str, suggested_name: &str, data: &[u8]) -> anyhow::Result<String> {
+        if suggested_name.contains("..") || suggested_name.contains('/') || suggested_name.contains('\\') {
+            anyhow::bail!("非法文件名");
+        }
+        let dir = self.root.join(date);
+        fs::create_dir_all(&dir).await?;
+
+        let (stem, ext) = match suggested_name.rfind('.') {
+            Some(i) => (suggested_name[..i].to_string(), suggested_name[i..].to_string()),
+            None => (suggested_name.to_string(), String::new()),
+        };
+
+        let mut filename = suggested_name.to_string();
+        let mut n = 0u32;
+        while self.file_path(date, &filename).exists() {
+            n += 1;
+            filename = format!("{}_{}{}", stem, n, ext);
+        }
+
+        let path = self.file_path(date, &filename);
+        fs::write(&path, data).await?;
+        Ok(filename)
+    }
+
     /// 确保目录存在并保存构建产物
     pub async fn save_build_artifacts(
         &self,

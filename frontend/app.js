@@ -218,20 +218,162 @@ function initBuildsPage() {
   };
 }
 
+const ADMIN_TOKEN_KEY = 'admin_token';
+
+function getAdminToken() {
+  return sessionStorage.getItem(ADMIN_TOKEN_KEY) || '';
+}
+
+function setAdminToken(t) {
+  if (t) sessionStorage.setItem(ADMIN_TOKEN_KEY, t);
+  else sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
+function fetchWithAdmin(url, opts = {}) {
+  const token = getAdminToken();
+  opts.headers = opts.headers || {};
+  opts.headers['X-Admin-Token'] = token;
+  return fetch(url, opts);
+}
+
+async function checkAdminStatus() {
+  const r = await fetch(`${API}/admin/status`);
+  const data = await r.json();
+  return data.enabled === true;
+}
+
+async function initAdminPage() {
+  const loginEl = document.getElementById('adminLogin');
+  const panelEl = document.getElementById('adminPanel');
+  const tokenInput = document.getElementById('adminTokenInput');
+  const tokenBtn = document.getElementById('adminTokenBtn');
+
+  const enabled = await checkAdminStatus();
+  if (!enabled) {
+    loginEl.innerHTML = '<p class="hint">未配置管理员（config.toml 中未设置 admin_token）</p>';
+    return;
+  }
+
+  const saved = getAdminToken();
+  if (saved) {
+    const ok = await fetchWithAdmin(`${API}/admin/verify`).then(r => r.ok);
+    if (ok) {
+      loginEl.classList.add('hidden');
+      panelEl.classList.remove('hidden');
+      loadAdminImages();
+      setupAdminUpload();
+      document.getElementById('adminLogout').onclick = () => {
+        setAdminToken('');
+        panelEl.classList.add('hidden');
+        loginEl.classList.remove('hidden');
+      };
+      return;
+    }
+    setAdminToken('');
+  }
+
+  tokenBtn.onclick = async () => {
+    const token = tokenInput.value.trim();
+    if (!token) return;
+    const r = await fetch(`${API}/admin/verify`, { headers: { 'X-Admin-Token': token } });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      alert(err.error || '令牌无效');
+      return;
+    }
+    setAdminToken(token);
+    tokenInput.value = '';
+    loginEl.classList.add('hidden');
+    panelEl.classList.remove('hidden');
+    loadAdminImages();
+    setupAdminUpload();
+    document.getElementById('adminLogout').onclick = () => {
+      setAdminToken('');
+      panelEl.classList.add('hidden');
+      loginEl.classList.remove('hidden');
+    };
+  };
+}
+
+async function loadAdminImages() {
+  const list = document.getElementById('adminImagesList');
+  list.innerHTML = '<p class="hint">加载中...</p>';
+  try {
+    const data = await fetchJSON(`${API}/images/all?offset=0&limit=100`);
+    const items = data.items || [];
+    if (!items.length) {
+      list.innerHTML = '<p class="hint">暂无镜像</p>';
+      return;
+    }
+    list.innerHTML = items.map(g => `
+      <div class="date-group">
+        <div class="date-group-title">${escapeHtml(g.date)}</div>
+        ${(g.images || []).map(img => `
+          <div class="image-item" data-date="${escapeHtml(g.date)}" data-filename="${escapeHtml(img.filename)}">
+            <span class="name">${escapeHtml(img.filename)}</span>
+            <span class="meta">${formatSize(img.size)}</span>
+            <a href="${img.url}" download>下载</a>
+            <button type="button" class="btn-delete" data-date="${escapeHtml(g.date)}" data-filename="${escapeHtml(img.filename)}">删除</button>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+    list.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm('确定删除该镜像？')) return;
+        const date = btn.dataset.date;
+        const filename = btn.dataset.filename;
+        const r = await fetchWithAdmin(`${API}/admin/image/${date}/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+        if (r.ok) loadAdminImages();
+        else alert((await r.json()).error || '删除失败');
+      };
+    });
+  } catch (e) {
+    list.innerHTML = '<p class="hint">加载失败</p>';
+  }
+}
+
+function setupAdminUpload() {
+  const form = document.getElementById('adminUploadForm');
+  const fileInput = document.getElementById('adminFileInput');
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const files = fileInput.files;
+    if (!files || !files.length) return;
+    const fd = new FormData();
+    for (let i = 0; i < files.length; i++) fd.append('files', files[i]);
+    const r = await fetchWithAdmin(`${API}/admin/upload`, { method: 'POST', body: fd });
+    const data = await r.json().catch(() => ({}));
+    if (data.saved && data.saved.length) {
+      fileInput.value = '';
+      loadAdminImages();
+    }
+    if (!r.ok) alert(data.error || '上传失败');
+  };
+}
+
 function route() {
   const path = location.pathname;
   const app = document.getElementById('app');
   const buildsApp = document.getElementById('builds-app');
+  const adminApp = document.getElementById('admin-app');
   document.querySelectorAll('.nav-link').forEach(a => {
-    a.classList.toggle('active', (path === '/' && a.href.endsWith('/')) || (path === '/builds' && a.href.endsWith('/builds')));
+    a.classList.toggle('active', (path === '/' && a.href.endsWith('/')) || (path === '/builds' && a.href.endsWith('/builds')) || (path === '/admin' && a.href.endsWith('/admin')));
   });
   if (path === '/builds') {
     app.classList.add('hidden');
     buildsApp.classList.remove('hidden');
+    adminApp.classList.add('hidden');
     initBuildsPage();
+  } else if (path === '/admin') {
+    app.classList.add('hidden');
+    buildsApp.classList.add('hidden');
+    adminApp.classList.remove('hidden');
+    initAdminPage();
   } else {
     app.classList.remove('hidden');
     buildsApp.classList.add('hidden');
+    adminApp.classList.add('hidden');
     initImagesPage();
   }
 }

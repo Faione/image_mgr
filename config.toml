@@ -1,5 +1,7 @@
 port = 3000
 uploads_dir = "uploads"
+# 超级管理员令牌，设置后可在 /admin 删除或上传镜像
+# admin_token = "your-secret-token"
 
 [[builds]]
 name = "example"

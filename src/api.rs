@@ -2,7 +2,7 @@ use crate::build;
 use crate::config::Config;
 use crate::storage::Storage;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
@@ -183,4 +183,114 @@ pub async fn create_build(
         let _ = build::run_build(&cfg, &storage).await;
     });
     (StatusCode::ACCEPTED, axum::Json(serde_json::json!({ "status": "构建已启动" })))
+}
+
+fn admin_token_from_headers(state: &AppState) -> Option<String> {
+    state.config.admin_token.as_ref().cloned()
+}
+
+async fn require_admin(
+    State(state): State<AppState>,
+    token: Option<String>,
+) -> Result<AppState, (StatusCode, axum::Json<serde_json::Value>)> {
+    let expected = match admin_token_from_headers(&state) {
+        Some(t) => t,
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                axum::Json(serde_json::json!({ "error": "未配置管理员" })),
+            ));
+        }
+    };
+    let provided = token.as_deref().unwrap_or("");
+    if provided.is_empty() || provided != expected {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            axum::Json(serde_json::json!({ "error": "无效的管理员令牌" })),
+        ));
+    }
+    Ok(state)
+}
+
+/// 检查是否启用管理员功能（不校验令牌）
+pub async fn admin_status(State(state): State<AppState>) -> impl IntoResponse {
+    let enabled = state.config.admin_token.is_some();
+    axum::Json(serde_json::json!({ "enabled": enabled }))
+}
+
+/// 验证管理员令牌
+pub async fn admin_verify(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    match require_admin(State(state), token).await {
+        Ok(_) => axum::Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => e.into_response(),
+    }
+}
+
+/// 删除镜像（需管理员令牌）
+pub async fn admin_delete_image(
+    State(state): State<AppState>,
+    Path((date, filename)): Path<(String, String)>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let state = match require_admin(State(state), token).await {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+
+    match state.storage.delete_image(&date, &filename).await {
+        Ok(()) => axum::Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// 上传镜像（需管理员令牌），按当前日期建目录，重名自动加后缀
+pub async fn admin_upload(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let state = match require_admin(State(state), token).await {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let mut saved = Vec::new();
+
+    while let Ok(Some(mut field)) = multipart.next_field().await {
+        let filename = match field.file_name().map(|s| s.to_string()) {
+            Some(n) if !n.is_empty() => n,
+            _ => continue,
+        };
+        let data = match field.bytes().await {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+
+        match state.storage.save_uploaded(&date, &filename, &data).await {
+            Ok(actual_name) => saved.push(serde_json::json!({ "date": date, "filename": actual_name })),
+            Err(_) => {}
+        }
+    }
+
+    axum::Json(serde_json::json!({ "saved": saved })).into_response()
 }
