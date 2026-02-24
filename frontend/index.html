@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统镜像分发</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>系统镜像分发</h1>
+    <nav>
+      <a href="/" class="nav-link active">镜像列表</a>
+      <a href="/builds" class="nav-link">构建管理</a>
+    </nav>
+  </header>
+
+  <main id="app">
+    <section class="dates-section">
+      <h2>按日期查看</h2>
+      <div class="date-picker">
+        <label>选择日期：</label>
+        <select id="dateSelect">
+          <option value="">加载中...</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="images-section">
+      <h2 id="imagesTitle">镜像文件</h2>
+      <div id="imagesList" class="images-list">
+        <p class="hint">请选择日期</p>
+      </div>
+    </section>
+  </main>
+
+  <main id="builds-app" class="hidden">
+    <section class="builds-section">
+      <h2>定时构建配置</h2>
+      <p class="hint">在 config.toml 中配置定时构建任务，构建脚本需将产物放入 output 目录</p>
+    </section>
+    <section class="trigger-section">
+      <h2>手动触发构建</h2>
+      <form id="buildForm">
+        <div class="form-row">
+          <label>名称</label>
+          <input type="text" name="name" placeholder="build-name" required>
+        </div>
+        <div class="form-row">
+          <label>间隔(分钟)</label>
+          <input type="number" name="interval" value="60" min="1">
+        </div>
+        <div class="form-row">
+          <label>构建脚本</label>
+          <textarea name="script" rows="8" placeholder="#!/bin/bash&#10;mkdir -p output&#10;echo 'sample' > output/sample.txt"></textarea>
+        </div>
+        <button type="submit">立即构建</button>
+      </form>
+    </section>
+    <section class="log-section">
+      <h2>构建日志</h2>
+      <div id="buildLog" class="build-log"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+port = 3000
+uploads_dir = "uploads"
+
+[[builds]]
+name = "example"
+interval_minutes = 60
+script = """
+#!/bin/bash
+echo 'Build started at $(date)'
+mkdir -p output
+echo 'sample content' > output/sample.txt
+"""
