@@ -10,5 +10,7 @@ COPY frontend ./frontend
 COPY config.toml ./
 RUN mkdir -p uploads
 
+ENV FRONTEND_DIR=/app/frontend
+
 EXPOSE 3000
 CMD ["./image-dist"]

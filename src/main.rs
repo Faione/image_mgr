@@ -57,7 +57,9 @@ async fn main() -> anyhow::Result<()> {
     let port = args.port.unwrap_or(config.port);
     let addr: SocketAddr = format!("{}:{}", args.host, port).parse()?;
 
-    let frontend_dir: PathBuf = [env!("CARGO_MANIFEST_DIR"), "frontend"].iter().collect();
+    let frontend_dir: PathBuf = std::env::var("FRONTEND_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| [env!("CARGO_MANIFEST_DIR"), "frontend"].iter().collect());
     let app = Router::new()
         .route("/", get(api::index))
         .route("/builds", get(api::index))
