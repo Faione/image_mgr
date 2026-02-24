@@ -47,6 +47,15 @@ cp /path/to/image.iso output/
 
 打开 `/builds` 页面，填写名称、间隔和脚本，点击「立即构建」。
 
+## 容器镜像
+
+```bash
+./scripts/build-container.sh [镜像名] [标签]
+# 示例
+./scripts/build-container.sh image-dist v1.0
+docker run -p 3000:3000 -v $(pwd)/uploads:/app/uploads image-dist:v1.0
+```
+
 ## 目录结构
 
 ```
