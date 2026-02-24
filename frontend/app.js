@@ -333,10 +333,43 @@ async function loadAdminImages() {
   }
 }
 
+async function doAdminUpload(files) {
+  if (!files || !files.length) return;
+  const form = document.getElementById('adminUploadForm');
+  const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = '上传中...';
+  }
+  try {
+    const fd = new FormData();
+    for (let i = 0; i < files.length; i++) fd.append('file', files[i]);
+    const r = await fetchWithAdmin(`${API}/admin/upload`, { method: 'POST', body: fd });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.saved && data.saved.length) {
+      document.getElementById('adminFileInput').value = '';
+      loadAdminImages();
+      alert(`已上传 ${data.saved.length} 个文件`);
+    } else if (!r.ok) {
+      alert(data.error || '上传失败');
+    } else {
+      alert('未保存任何文件，请检查格式');
+    }
+  } catch (err) {
+    alert('上传请求失败: ' + (err.message || err));
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '上传';
+    }
+  }
+}
+
 function setupAdminUpload() {
   const form = document.getElementById('adminUploadForm');
   const fileInput = document.getElementById('adminFileInput');
-  const submitBtn = form.querySelector('button[type="submit"]');
+  const dropZone = document.getElementById('adminDropZone');
+
   form.onsubmit = async (e) => {
     e.preventDefault();
     const files = fileInput.files;
@@ -344,29 +377,30 @@ function setupAdminUpload() {
       alert('请先选择文件');
       return;
     }
-    const fd = new FormData();
-    for (let i = 0; i < files.length; i++) fd.append('file', files[i]);
-    submitBtn.disabled = true;
-    submitBtn.textContent = '上传中...';
-    try {
-      const r = await fetchWithAdmin(`${API}/admin/upload`, { method: 'POST', body: fd });
-      const data = await r.json().catch(() => ({}));
-      if (r.ok && data.saved && data.saved.length) {
-        fileInput.value = '';
-        loadAdminImages();
-        alert(`已上传 ${data.saved.length} 个文件`);
-      } else if (!r.ok) {
-        alert(data.error || '上传失败');
-      } else {
-        alert('未保存任何文件，请检查格式');
-      }
-    } catch (err) {
-      alert('上传请求失败: ' + (err.message || err));
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = '上传';
-    }
+    await doAdminUpload(files);
   };
+
+  if (dropZone) {
+    ['dragenter', 'dragover'].forEach(ev => {
+      dropZone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('drag-over');
+      });
+    });
+    ['dragleave', 'drop'].forEach(ev => {
+      dropZone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('drag-over');
+      });
+    });
+    dropZone.addEventListener('drop', (e) => {
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length) doAdminUpload(files);
+    });
+    dropZone.addEventListener('click', () => fileInput.click());
+  }
 }
 
 function route() {
