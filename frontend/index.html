@@ -11,7 +11,6 @@
     <h1>系统镜像分发</h1>
     <nav>
       <a href="/" class="nav-link active">镜像列表</a>
-      <a href="/builds" class="nav-link">构建管理</a>
       <a href="/admin" class="nav-link">管理</a>
     </nav>
   </header>
@@ -43,7 +42,7 @@
     <section class="admin-section">
       <h2>超级管理员</h2>
       <div id="adminLogin" class="admin-login">
-        <p class="hint">在 config.toml 中配置 admin_token 后，在此输入令牌以管理镜像（删除/上传）。</p>
+        <p class="hint">在 config.toml 中配置 admin_token 后，在此输入令牌以管理镜像（删除/上传）与构建。</p>
         <div class="form-row">
           <label>管理员令牌</label>
           <input type="password" id="adminTokenInput" placeholder="admin_token">
@@ -65,36 +64,27 @@
         </form>
         <h3>已有镜像（可删除）</h3>
         <div id="adminImagesList" class="images-list"></div>
+        <h3>构建管理</h3>
+        <p class="hint">在 config.toml 中配置定时构建任务，构建脚本需将产物放入 output 目录</p>
+        <h4 class="admin-h4">手动触发构建</h4>
+        <form id="buildForm">
+          <div class="form-row">
+            <label>名称</label>
+            <input type="text" name="name" placeholder="build-name" required>
+          </div>
+          <div class="form-row">
+            <label>间隔(分钟)</label>
+            <input type="number" name="interval" value="60" min="1">
+          </div>
+          <div class="form-row">
+            <label>构建脚本</label>
+            <textarea name="script" rows="8" placeholder="#!/bin/bash&#10;mkdir -p output&#10;echo 'sample' > output/sample.txt"></textarea>
+          </div>
+          <button type="submit">立即构建</button>
+        </form>
+        <h4 class="admin-h4">构建日志</h4>
+        <div id="buildLog" class="build-log"></div>
       </div>
-    </section>
-  </main>
-
-  <main id="builds-app" class="hidden">
-    <section class="builds-section">
-      <h2>定时构建配置</h2>
-      <p class="hint">在 config.toml 中配置定时构建任务，构建脚本需将产物放入 output 目录</p>
-    </section>
-    <section class="trigger-section">
-      <h2>手动触发构建</h2>
-      <form id="buildForm">
-        <div class="form-row">
-          <label>名称</label>
-          <input type="text" name="name" placeholder="build-name" required>
-        </div>
-        <div class="form-row">
-          <label>间隔(分钟)</label>
-          <input type="number" name="interval" value="60" min="1">
-        </div>
-        <div class="form-row">
-          <label>构建脚本</label>
-          <textarea name="script" rows="8" placeholder="#!/bin/bash&#10;mkdir -p output&#10;echo 'sample' > output/sample.txt"></textarea>
-        </div>
-        <button type="submit">立即构建</button>
-      </form>
-    </section>
-    <section class="log-section">
-      <h2>构建日志</h2>
-      <div id="buildLog" class="build-log"></div>
     </section>
   </main>
 

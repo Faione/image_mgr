@@ -67,7 +67,6 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| [env!("CARGO_MANIFEST_DIR"), "frontend"].iter().collect());
     let app = Router::new()
         .route("/", get(api::index))
-        .route("/builds", get(api::index))
         .route("/admin", get(api::index))
         .route("/api/dates", get(api::list_dates))
         .route("/api/images", get(api::list_images))

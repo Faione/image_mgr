@@ -175,8 +175,14 @@ function initImagesPage() {
 
 async function loadBuildLog() {
   const el = document.getElementById('buildLog');
+  if (!el) return;
   try {
-    const log = await fetchJSON(`${API}/builds`);
+    const r = await fetchWithAdmin(`${API}/builds`);
+    if (!r.ok) {
+      el.innerHTML = '<p class="hint">加载失败（需管理员）</p>';
+      return;
+    }
+    const log = await r.json();
     if (!log.length) {
       el.innerHTML = '<p class="hint">暂无构建记录</p>';
       return;
@@ -194,25 +200,29 @@ async function loadBuildLog() {
   }
 }
 
-function initBuildsPage() {
-  loadBuildLog();
-  document.getElementById('buildForm').onsubmit = async (e) => {
+function setupBuildFormInAdmin() {
+  const form = document.getElementById('buildForm');
+  if (!form) return;
+  form.onsubmit = async (e) => {
     e.preventDefault();
-    const form = e.target;
+    const formEl = e.target;
     const data = {
-      name: form.name.value,
-      interval_minutes: +form.interval.value,
-      script: form.script.value,
+      name: formEl.name.value,
+      interval_minutes: +formEl.interval.value,
+      script: formEl.script.value,
     };
     try {
-      const r = await fetch(`${API}/builds`, {
+      const r = await fetchWithAdmin(`${API}/builds`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       if (r.ok) {
         loadBuildLog();
-        form.script.value = '';
+        formEl.script.value = '';
+      } else {
+        const err = await r.json().catch(() => ({}));
+        alert(err.error || '构建启动失败');
       }
     } catch (_) {}
   };
@@ -261,7 +271,9 @@ async function initAdminPage() {
       loginEl.classList.add('hidden');
       panelEl.classList.remove('hidden');
       loadAdminImages();
+      loadBuildLog();
       setupAdminUpload();
+      setupBuildFormInAdmin();
       document.getElementById('adminLogout').onclick = () => {
         setAdminToken('');
         panelEl.classList.add('hidden');
@@ -286,7 +298,9 @@ async function initAdminPage() {
     loginEl.classList.add('hidden');
     panelEl.classList.remove('hidden');
     loadAdminImages();
+    loadBuildLog();
     setupAdminUpload();
+    setupBuildFormInAdmin();
     document.getElementById('adminLogout').onclick = () => {
       setAdminToken('');
       panelEl.classList.add('hidden');
@@ -406,24 +420,16 @@ function setupAdminUpload() {
 function route() {
   const path = location.pathname;
   const app = document.getElementById('app');
-  const buildsApp = document.getElementById('builds-app');
   const adminApp = document.getElementById('admin-app');
   document.querySelectorAll('.nav-link').forEach(a => {
-    a.classList.toggle('active', (path === '/' && a.href.endsWith('/')) || (path === '/builds' && a.href.endsWith('/builds')) || (path === '/admin' && a.href.endsWith('/admin')));
+    a.classList.toggle('active', (path === '/' && a.href.endsWith('/')) || (path === '/admin' && a.href.endsWith('/admin')));
   });
-  if (path === '/builds') {
+  if (path === '/admin') {
     app.classList.add('hidden');
-    buildsApp.classList.remove('hidden');
-    adminApp.classList.add('hidden');
-    initBuildsPage();
-  } else if (path === '/admin') {
-    app.classList.add('hidden');
-    buildsApp.classList.add('hidden');
     adminApp.classList.remove('hidden');
     initAdminPage();
   } else {
     app.classList.remove('hidden');
-    buildsApp.classList.add('hidden');
     adminApp.classList.add('hidden');
     initImagesPage();
   }

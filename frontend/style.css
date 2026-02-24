@@ -240,7 +240,8 @@ button:hover {
 .build-record .status.failed { color: #f85149; }
 
 .admin-login .form-row { max-width: 320px; }
-.admin-section h3 { font-size: 0.95rem; margin: 1rem 0 0.5rem; color: var(--muted); }
+.admin-section h3 { font-size: 0.95rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
+.admin-section h4.admin-h4 { font-size: 0.9rem; margin: 1rem 0 0.5rem; color: var(--muted); font-weight: 500; }
 .text-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; font-size: inherit; }
 .text-btn:hover { color: var(--accent); }
 .image-item .btn-delete { color: #f85149; border-color: #f85149; margin-left: 0.5rem; }

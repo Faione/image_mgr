@@ -164,15 +164,37 @@ pub async fn download(
     }
 }
 
-pub async fn list_builds() -> impl IntoResponse {
+/// 构建日志（需管理员令牌）
+pub async fn list_builds(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let _state = match require_admin(State(state), token).await {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
     let log = build::get_build_log();
-    axum::Json(log)
+    axum::Json(log).into_response()
 }
 
+/// 手动触发构建（需管理员令牌）
 pub async fn create_build(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     axum::Json(body): axum::Json<CreateBuildBody>,
 ) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let state = match require_admin(State(state), token).await {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
     let cfg = crate::config::BuildConfig {
         name: body.name,
         interval_minutes: body.interval_minutes.unwrap_or(60),
@@ -182,7 +204,7 @@ pub async fn create_build(
     tokio::spawn(async move {
         let _ = build::run_build(&cfg, &storage).await;
     });
-    (StatusCode::ACCEPTED, axum::Json(serde_json::json!({ "status": "构建已启动" })))
+    (StatusCode::ACCEPTED, axum::Json(serde_json::json!({ "status": "构建已启动" }))).into_response()
 }
 
 fn admin_token_from_headers(state: &AppState) -> Option<String> {
