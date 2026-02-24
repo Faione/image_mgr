@@ -2,7 +2,7 @@ use crate::build;
 use crate::config::Config;
 use crate::storage::Storage;
 use axum::{
-    extract::{Multipart, Path, Query, State},
+    extract::{FromRequest, Multipart, Path, Query, Request, State},
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
@@ -261,10 +261,10 @@ pub async fn admin_delete_image(
 /// 上传镜像（需管理员令牌），按当前日期建目录，重名自动加后缀
 pub async fn admin_upload(
     State(state): State<AppState>,
-    headers: axum::http::HeaderMap,
-    mut multipart: Multipart,
+    request: Request,
 ) -> impl IntoResponse {
-    let token = headers
+    let token = request
+        .headers()
         .get("X-Admin-Token")
         .and_then(|v| v.to_str().ok())
         .map(String::from);
@@ -273,16 +273,27 @@ pub async fn admin_upload(
         Err(e) => return e.into_response(),
     };
 
+    let mut multipart = match Multipart::from_request(request, &state).await {
+        Ok(m) => m,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                axum::Json(serde_json::json!({ "error": format!("无效的请求体: {}", e) })),
+            )
+                .into_response()
+        }
+    };
+
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
     let mut saved = Vec::new();
 
-    while let Ok(Some(mut field)) = multipart.next_field().await {
-        let filename = match field.file_name().map(|s| s.to_string()) {
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let filename = match field.file_name().map(|s: &str| s.to_string()) {
             Some(n) if !n.is_empty() => n,
             _ => continue,
         };
-        let data = match field.bytes().await {
-            Ok(b) => b,
+        let data: Vec<u8> = match field.bytes().await {
+            Ok(b) => b.to_vec(),
             Err(_) => continue,
         };
 

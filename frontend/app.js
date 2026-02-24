@@ -336,19 +336,36 @@ async function loadAdminImages() {
 function setupAdminUpload() {
   const form = document.getElementById('adminUploadForm');
   const fileInput = document.getElementById('adminFileInput');
+  const submitBtn = form.querySelector('button[type="submit"]');
   form.onsubmit = async (e) => {
     e.preventDefault();
     const files = fileInput.files;
-    if (!files || !files.length) return;
-    const fd = new FormData();
-    for (let i = 0; i < files.length; i++) fd.append('files', files[i]);
-    const r = await fetchWithAdmin(`${API}/admin/upload`, { method: 'POST', body: fd });
-    const data = await r.json().catch(() => ({}));
-    if (data.saved && data.saved.length) {
-      fileInput.value = '';
-      loadAdminImages();
+    if (!files || !files.length) {
+      alert('请先选择文件');
+      return;
     }
-    if (!r.ok) alert(data.error || '上传失败');
+    const fd = new FormData();
+    for (let i = 0; i < files.length; i++) fd.append('file', files[i]);
+    submitBtn.disabled = true;
+    submitBtn.textContent = '上传中...';
+    try {
+      const r = await fetchWithAdmin(`${API}/admin/upload`, { method: 'POST', body: fd });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && data.saved && data.saved.length) {
+        fileInput.value = '';
+        loadAdminImages();
+        alert(`已上传 ${data.saved.length} 个文件`);
+      } else if (!r.ok) {
+        alert(data.error || '上传失败');
+      } else {
+        alert('未保存任何文件，请检查格式');
+      }
+    } catch (err) {
+      alert('上传请求失败: ' + (err.message || err));
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '上传';
+    }
   };
 }
 
