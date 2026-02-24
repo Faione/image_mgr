@@ -20,6 +20,18 @@ pub struct DateQuery {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct AllImagesQuery {
+    #[serde(default)]
+    offset: usize,
+    #[serde(default = "default_limit")]
+    limit: usize,
+}
+
+fn default_limit() -> usize {
+    5
+}
+
+#[derive(Debug, Deserialize)]
 pub struct CreateBuildBody {
     pub name: String,
     pub interval_minutes: Option<u64>,
@@ -27,10 +39,8 @@ pub struct CreateBuildBody {
 }
 
 pub async fn index() -> Response {
-    match tokio::fs::read_to_string("frontend/index.html").await {
-        Ok(html) => Html(html).into_response(),
-        Err(_) => (StatusCode::NOT_FOUND, "前端文件未找到").into_response(),
-    }
+    let html = include_str!("../frontend/index.html");
+    Html(html).into_response()
 }
 
 pub async fn list_dates(State(state): State<AppState>) -> impl IntoResponse {
@@ -44,12 +54,48 @@ pub async fn list_dates(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
+pub async fn list_all_images(
+    State(state): State<AppState>,
+    Query(q): Query<AllImagesQuery>,
+) -> impl IntoResponse {
+    let limit = q.limit.min(50);
+    match state.storage.list_all_grouped(q.offset, limit).await {
+        Ok(groups) => {
+            let items: Vec<serde_json::Value> = groups
+                .into_iter()
+                .map(|(date, images)| {
+                    let list: Vec<ImageResponse> = images
+                        .into_iter()
+                        .map(|i| {
+                            let filename = i.filename.clone();
+                            ImageResponse {
+                                filename: filename.clone(),
+                                size: i.size,
+                                modified: i.modified.to_rfc3339(),
+                                url: format!("/api/download/{}/{}", date, filename),
+                            }
+                        })
+                        .collect();
+                    serde_json::json!({ "date": date, "images": list })
+                })
+                .collect();
+            axum::Json(serde_json::json!({ "items": items, "has_more": items.len() >= limit }))
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
 pub async fn list_images(
     State(state): State<AppState>,
     Query(q): Query<DateQuery>,
 ) -> impl IntoResponse {
     let date = match q.date {
-        Some(d) if !d.is_empty() => d,
+        Some(ref d) if !d.is_empty() => d.clone(),
         _ => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -63,11 +109,14 @@ pub async fn list_images(
         Ok(images) => {
             let list: Vec<ImageResponse> = images
                 .into_iter()
-                .map(|i| ImageResponse {
-                    filename: i.filename,
-                    size: i.size,
-                    modified: i.modified.to_rfc3339(),
-                    url: format!("/api/download/{}/{}", date, i.filename),
+                .map(|i| {
+                    let filename = i.filename;
+                    ImageResponse {
+                        filename: filename.clone(),
+                        size: i.size,
+                        modified: i.modified.to_rfc3339(),
+                        url: format!("/api/download/{}/{}", date, filename),
+                    }
                 })
                 .collect();
             axum::Json(list).into_response()

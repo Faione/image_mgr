@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::process::Command;
 use tokio::time::{interval, Duration};
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct BuildRecord {
     pub name: String,
     pub status: String,

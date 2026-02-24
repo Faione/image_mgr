@@ -134,6 +134,50 @@ h2 {
   margin: 0;
 }
 
+.pull-hint {
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  min-height: 1.5rem;
+}
+
+.pull-hint.refreshing {
+  color: var(--accent);
+}
+
+.date-group {
+  margin-bottom: 1rem;
+}
+
+.date-group-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 0.5rem 1rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.load-more-wrap {
+  text-align: center;
+  padding: 1rem;
+}
+
+.load-more-btn {
+  padding: 0.5rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.load-more-btn:hover {
+  border-color: var(--accent);
+}
+
 .form-row {
   margin-bottom: 1rem;
 }

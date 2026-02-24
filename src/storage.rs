@@ -1,5 +1,4 @@
 use chrono::{DateTime, Local};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -37,6 +36,23 @@ impl Storage {
         }
         dates.sort_by(|a, b| b.cmp(a));
         Ok(dates)
+    }
+
+    /// 获取所有镜像按日期分组，支持分页（每次返回 limit 个日期组）
+    pub async fn list_all_grouped(
+        &self,
+        offset: usize,
+        limit: usize,
+    ) -> anyhow::Result<Vec<(String, Vec<ImageInfo>)>> {
+        let dates = self.list_dates().await?;
+        let mut result = Vec::new();
+        for date in dates.into_iter().skip(offset).take(limit) {
+            let images = self.list_images(&date).await?;
+            if !images.is_empty() {
+                result.push((date, images));
+            }
+        }
+        Ok(result)
     }
 
     /// 获取指定日期的镜像列表

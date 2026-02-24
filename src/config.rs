@@ -38,7 +38,7 @@ impl Config {
             std::fs::read_to_string(&path)?
         } else {
             let default = Self::default_config();
-            std::fs::write(&path, default)?;
+            std::fs::write(&path, &default)?;
             default
         };
         Ok(toml::from_str(&content)?)

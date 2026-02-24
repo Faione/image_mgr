@@ -2,7 +2,8 @@
 **/*.rs.bk
 *.pdb
 Cargo.lock
-uploads/
+uploads/*
+!uploads/.gitkeep
 *.log
 .env
 .env.local
