@@ -1,6 +1,0 @@
-target/
-.git/
-.env
-.envrc
-*.log
-.DS_Store
