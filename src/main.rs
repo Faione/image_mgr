@@ -3,7 +3,11 @@ mod build;
 mod config;
 mod storage;
 
-use axum::{routing::{delete, get, post}, Router};
+use axum::{
+    extract::DefaultBodyLimit,
+    routing::{delete, get, post},
+    Router,
+};
 use clap::Parser;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -78,7 +82,8 @@ async fn main() -> anyhow::Result<()> {
             "/static",
             tower_http::services::ServeDir::new(frontend_dir),
         )
-        .layer(RequestBodyLimitLayer::new(256 * 1024 * 1024)) // 256MB for upload
+        .layer(DefaultBodyLimit::disable()) // 关闭 axum 默认 2MB 限制，否则大文件上传会 Failed to fetch
+        .layer(RequestBodyLimitLayer::new(256 * 1024 * 1024)) // 256MB 上限
         .layer(CorsLayer::permissive())
         .with_state(api::AppState { config, storage });
 
