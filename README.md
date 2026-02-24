@@ -20,9 +20,13 @@
 
 ```bash
 cargo run
+# 指定监听地址与端口
+cargo run -- --host 127.0.0.1 --port 8080
+# 简写: -h / -p
+cargo run -- -h 0.0.0.0 -p 3000
 ```
 
-默认访问 http://localhost:3000
+默认访问 http://localhost:3000。支持 Ctrl+C / SIGTERM 优雅退出。
 
 ### 配置
 
