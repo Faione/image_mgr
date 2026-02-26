@@ -70,6 +70,25 @@ h2 {
   color: var(--muted);
 }
 
+.stable-section {
+  margin-bottom: 2rem;
+}
+.stable-section .images-list {
+  margin-top: 0.5rem;
+}
+.form-row-inline {
+  margin-bottom: 0.5rem;
+}
+.form-row-inline label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+.form-row-inline input[type="checkbox"] {
+  width: auto;
+}
+
 .date-picker {
   display: flex;
   align-items: center;

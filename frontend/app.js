@@ -7,6 +7,21 @@ async function fetchJSON(url) {
   return r.json();
 }
 
+async function loadStableImages() {
+  const list = document.getElementById('stableImagesList');
+  if (!list) return;
+  try {
+    const images = await fetchJSON(`${API}/images/stable`);
+    if (!images.length) {
+      list.innerHTML = '<p class="hint">暂无固定发布</p>';
+      return;
+    }
+    list.innerHTML = images.map(renderImageItem).join('');
+  } catch (e) {
+    list.innerHTML = '<p class="hint">加载失败</p>';
+  }
+}
+
 async function loadDates() {
   const select = document.getElementById('dateSelect');
   try {
@@ -123,7 +138,7 @@ function doRefresh() {
   hint.textContent = '刷新中...';
   hint.classList.add('refreshing');
   const date = document.getElementById('dateSelect').value;
-  loadImages(date).then(() => {
+  Promise.all([loadStableImages(), loadImages(date)]).then(() => {
     hint.textContent = '下拉刷新';
     hint.classList.remove('refreshing');
   });
@@ -158,6 +173,7 @@ function setupPullRefresh() {
 }
 
 function initImagesPage() {
+  loadStableImages();
   loadDates();
   const select = document.getElementById('dateSelect');
   select.onchange = () => {
@@ -313,21 +329,29 @@ async function loadAdminImages() {
   const list = document.getElementById('adminImagesList');
   list.innerHTML = '<p class="hint">加载中...</p>';
   try {
-    const data = await fetchJSON(`${API}/images/all?offset=0&limit=100`);
-    const items = data.items || [];
-    if (!items.length) {
+    const [stableImages, allData] = await Promise.all([
+      fetchJSON(`${API}/images/stable`).catch(() => []),
+      fetchJSON(`${API}/images/all?offset=0&limit=100`).catch(() => ({ items: [] })),
+    ]);
+    const items = allData.items || [];
+    const groups = [];
+    if (stableImages && stableImages.length) {
+      groups.push({ date: '固定发布', images: stableImages });
+    }
+    groups.push(...items);
+    if (!groups.length) {
       list.innerHTML = '<p class="hint">暂无镜像</p>';
       return;
     }
-    list.innerHTML = items.map(g => `
+    list.innerHTML = groups.map(g => `
       <div class="date-group">
         <div class="date-group-title">${escapeHtml(g.date)}</div>
         ${(g.images || []).map(img => `
-          <div class="image-item" data-date="${escapeHtml(g.date)}" data-filename="${escapeHtml(img.filename)}">
+          <div class="image-item" data-date="${escapeHtml(g.date === '固定发布' ? 'stable' : g.date)}" data-filename="${escapeHtml(img.filename)}">
             <span class="name">${escapeHtml(img.filename)}</span>
             <span class="meta">${formatSize(img.size)}</span>
             <a href="${img.url}" download>下载</a>
-            <button type="button" class="btn-delete" data-date="${escapeHtml(g.date)}" data-filename="${escapeHtml(img.filename)}">删除</button>
+            <button type="button" class="btn-delete" data-date="${escapeHtml(g.date === '固定发布' ? 'stable' : g.date)}" data-filename="${escapeHtml(img.filename)}">删除</button>
           </div>
         `).join('')}
       </div>
@@ -351,6 +375,7 @@ async function doAdminUpload(files) {
   if (!files || !files.length) return;
   const form = document.getElementById('adminUploadForm');
   const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+  const toStable = document.getElementById('adminUploadToStable') && document.getElementById('adminUploadToStable').checked;
   if (submitBtn) {
     submitBtn.disabled = true;
     submitBtn.textContent = '上传中...';
@@ -358,11 +383,13 @@ async function doAdminUpload(files) {
   try {
     const fd = new FormData();
     for (let i = 0; i < files.length; i++) fd.append('file', files[i]);
-    const r = await fetchWithAdmin(`${API}/admin/upload`, { method: 'POST', body: fd });
+    const url = toStable ? `${API}/admin/upload?target=stable` : `${API}/admin/upload`;
+    const r = await fetchWithAdmin(url, { method: 'POST', body: fd });
     const data = await r.json().catch(() => ({}));
     if (r.ok && data.saved && data.saved.length) {
       document.getElementById('adminFileInput').value = '';
       loadAdminImages();
+      if (toStable) loadStableImages();
       alert(`已上传 ${data.saved.length} 个文件`);
     } else if (!r.ok) {
       alert(data.error || '上传失败');

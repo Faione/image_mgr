@@ -32,6 +32,12 @@ fn default_limit() -> usize {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UploadTargetQuery {
+    /// 为 "stable" 时上传到固定发布栏，否则上传到当日目录
+    target: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct CreateBuildBody {
     pub name: String,
     pub interval_minutes: Option<u64>,
@@ -81,6 +87,33 @@ pub async fn list_all_images(
                 .collect();
             axum::Json(serde_json::json!({ "items": items, "has_more": items.len() >= limit }))
                 .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// 固定发布栏镜像列表（非按日期，仅管理员维护）
+pub async fn list_stable_images(State(state): State<AppState>) -> impl IntoResponse {
+    const STABLE: &str = "stable";
+    match state.storage.list_images(STABLE).await {
+        Ok(images) => {
+            let list: Vec<ImageResponse> = images
+                .into_iter()
+                .map(|i| {
+                    let filename = i.filename.clone();
+                    ImageResponse {
+                        filename: filename.clone(),
+                        size: i.size,
+                        modified: i.modified.to_rfc3339(),
+                        url: format!("/api/download/{}/{}", STABLE, filename),
+                    }
+                })
+                .collect();
+            axum::Json(list).into_response()
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -280,9 +313,10 @@ pub async fn admin_delete_image(
     }
 }
 
-/// 上传镜像（需管理员令牌），按当前日期建目录，重名自动加后缀
+/// 上传镜像（需管理员令牌）。默认按当前日期建目录；?target=stable 时上传到固定发布栏
 pub async fn admin_upload(
     State(state): State<AppState>,
+    Query(q): Query<UploadTargetQuery>,
     request: Request,
 ) -> impl IntoResponse {
     let token = request
@@ -306,7 +340,11 @@ pub async fn admin_upload(
         }
     };
 
-    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let date = if q.target.as_deref() == Some("stable") {
+        "stable".to_string()
+    } else {
+        chrono::Local::now().format("%Y-%m-%d").to_string()
+    };
     let mut saved = Vec::new();
 
     while let Ok(Some(field)) = multipart.next_field().await {

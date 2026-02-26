@@ -16,6 +16,13 @@
   </header>
 
   <main id="app">
+    <section class="stable-section">
+      <h2>固定发布</h2>
+      <p class="hint">非每日构建的稳定产物，由管理员维护，不随日期变化</p>
+      <div id="stableImagesList" class="images-list">
+        <p class="hint">加载中...</p>
+      </div>
+    </section>
     <section class="dates-section">
       <h2>按日期查看</h2>
       <div class="date-picker">
@@ -52,7 +59,10 @@
       <div id="adminPanel" class="hidden">
         <p class="hint">已登录 · <button type="button" id="adminLogout" class="text-btn">退出</button></p>
         <h3>上传镜像</h3>
-        <p class="hint">将保存到当日目录 uploads/YYYY-MM-DD/，重名自动加 _1、_2 后缀</p>
+        <p class="hint">默认保存到当日目录 uploads/YYYY-MM-DD/；勾选「上传到固定发布栏」则保存到固定发布，重名自动加 _1、_2 后缀</p>
+        <div class="form-row form-row-inline">
+          <label><input type="checkbox" id="adminUploadToStable"> 上传到固定发布栏</label>
+        </div>
         <div id="adminDropZone" class="drop-zone">
           <span class="drop-zone-text">将文件拖到此处，或点击下方选择文件</span>
         </div>

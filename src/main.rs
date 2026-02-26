@@ -70,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/admin", get(api::index))
         .route("/api/dates", get(api::list_dates))
         .route("/api/images", get(api::list_images))
+        .route("/api/images/stable", get(api::list_stable_images))
         .route("/api/images/all", get(api::list_all_images))
         .route("/api/download/:date/:filename", get(api::download))
         .route("/api/builds", get(api::list_builds).post(api::create_build))
