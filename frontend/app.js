@@ -11,7 +11,9 @@ async function loadStableImages() {
   const list = document.getElementById('stableImagesList');
   if (!list) return;
   try {
-    const images = await fetchJSON(`${API}/images/stable`);
+    const r = await fetch(`${API}/images/stable`);
+    const data = r.ok ? await r.json() : null;
+    const images = Array.isArray(data) ? data : [];
     if (!images.length) {
       list.innerHTML = '<p class="hint">暂无固定发布</p>';
       return;

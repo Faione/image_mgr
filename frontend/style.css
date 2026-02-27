@@ -55,6 +55,31 @@ main {
   padding: 2rem;
 }
 
+.app-with-sidebar {
+  max-width: none;
+  display: flex;
+  gap: 2rem;
+  padding: 1.5rem 2rem;
+  align-items: flex-start;
+}
+.left-sidebar {
+  flex: 0 0 280px;
+  position: sticky;
+  top: 1rem;
+}
+.left-sidebar .stable-section {
+  margin-bottom: 0;
+}
+.left-sidebar .images-list {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.main-content {
+  flex: 1;
+  min-width: 0;
+  max-width: 720px;
+}
+
 .hidden {
   display: none !important;
 }
@@ -71,7 +96,7 @@ h2 {
 }
 
 .stable-section {
-  margin-bottom: 2rem;
+  margin-bottom: 0;
 }
 .stable-section .images-list {
   margin-top: 0.5rem;
