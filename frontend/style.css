@@ -1,4 +1,14 @@
 :root {
+  --bg: #f6f8fa;
+  --surface: #ffffff;
+  --border: #d0d7de;
+  --text: #1f2328;
+  --muted: #656d76;
+  --accent: #0969da;
+  --success: #1a7f37;
+}
+
+[data-theme="dark"] {
   --bg: #0d1117;
   --surface: #161b22;
   --border: #30363d;
@@ -282,6 +292,19 @@ button:hover {
 
 .build-record .status.success { color: var(--success); }
 .build-record .status.failed { color: #f85149; }
+
+.theme-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.theme-toggle:hover {
+  border-color: var(--accent);
+}
 
 .admin-login .form-row { max-width: 320px; }
 .admin-section h3 { font-size: 0.95rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }

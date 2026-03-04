@@ -1,5 +1,21 @@
 const API = '/api';
 const PAGE_SIZE = 5;
+const THEME_KEY = 'theme';
+
+function initTheme() {
+  let theme = localStorage.getItem(THEME_KEY) || 'light';
+  document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : '');
+  const btn = document.getElementById('themeToggle');
+  if (btn) {
+    btn.textContent = theme === 'dark' ? '深色' : '浅色';
+    btn.onclick = () => {
+      theme = theme === 'dark' ? 'light' : 'dark';
+      localStorage.setItem(THEME_KEY, theme);
+      document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : '');
+      btn.textContent = theme === 'dark' ? '深色' : '浅色';
+    };
+  }
+}
 
 async function fetchJSON(url) {
   const r = await fetch(url);
@@ -465,4 +481,5 @@ function route() {
 }
 
 route();
+initTheme();
 window.addEventListener('popstate', route);
