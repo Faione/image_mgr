@@ -9,6 +9,9 @@ pub struct ImageInfo {
     pub modified: DateTime<Local>,
 }
 
+/// 每日构建发布说明文件名（不出现在镜像列表中）
+pub const RELEASE_NOTES_FILENAME: &str = "release_notes.txt";
+
 pub struct Storage {
     root: PathBuf,
 }
@@ -67,14 +70,17 @@ impl Storage {
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if path.is_file() {
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+                if name == RELEASE_NOTES_FILENAME {
+                    continue;
+                }
                 let meta = fs::metadata(&path).await?;
                 let modified: DateTime<Local> = meta.modified()?.into();
                 images.push(ImageInfo {
-                    filename: path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("")
-                        .to_string(),
+                    filename: name.to_string(),
                     size: meta.len(),
                     modified,
                 });
@@ -105,6 +111,9 @@ impl Storage {
     pub async fn save_uploaded(&self, date: &str, suggested_name: &str, data: &[u8]) -> anyhow::Result<String> {
         if suggested_name.contains("..") || suggested_name.contains('/') || suggested_name.contains('\\') {
             anyhow::bail!("非法文件名");
+        }
+        if suggested_name == RELEASE_NOTES_FILENAME {
+            anyhow::bail!("发布说明请通过管理页的「发布说明」保存");
         }
         let dir = self.root.join(date);
         fs::create_dir_all(&dir).await?;
@@ -151,5 +160,57 @@ impl Storage {
             }
         }
         Ok(saved)
+    }
+
+    fn announcement_path(&self) -> PathBuf {
+        self.root.join(".site_announcement")
+    }
+
+    pub async fn get_announcement(&self) -> String {
+        match fs::read_to_string(self.announcement_path()).await {
+            Ok(s) => s.trim().to_string(),
+            Err(_) => String::new(),
+        }
+    }
+
+    pub async fn set_announcement(&self, content: &str) -> anyhow::Result<()> {
+        fs::create_dir_all(&self.root).await?;
+        fs::write(self.announcement_path(), content).await?;
+        Ok(())
+    }
+
+    fn release_notes_path(&self, date: &str) -> PathBuf {
+        self.root.join(date).join(RELEASE_NOTES_FILENAME)
+    }
+
+    pub async fn get_release_notes(&self, date: &str) -> anyhow::Result<Option<String>> {
+        let p = self.release_notes_path(date);
+        if !p.exists() {
+            return Ok(None);
+        }
+        Ok(Some(fs::read_to_string(&p).await?))
+    }
+
+    pub async fn set_release_notes(&self, date: &str, content: &str) -> anyhow::Result<()> {
+        if !Self::is_valid_date_dir(date) {
+            anyhow::bail!("仅支持 YYYY-MM-DD 日期目录");
+        }
+        let p = self.release_notes_path(date);
+        if content.trim().is_empty() {
+            if p.exists() {
+                fs::remove_file(&p).await?;
+            }
+            return Ok(());
+        }
+        let dir = self.root.join(date);
+        fs::create_dir_all(&dir).await?;
+        fs::write(&p, content).await?;
+        Ok(())
+    }
+
+    fn is_valid_date_dir(name: &str) -> bool {
+        name.len() == 10
+            && name.chars().all(|c| c.is_ascii_digit() || c == '-')
+            && name != "stable"
     }
 }

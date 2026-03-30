@@ -16,6 +16,8 @@
     </nav>
   </header>
 
+  <div id="announcementBar" class="announcement-bar hidden" role="status" aria-live="polite"></div>
+
   <main id="app" class="app-with-sidebar">
     <aside class="left-sidebar">
       <section class="stable-section">
@@ -39,6 +41,7 @@
       <section class="images-section" id="imagesSection">
         <div id="pullHint" class="pull-hint" title="点击刷新">下拉刷新</div>
         <h2 id="imagesTitle">镜像文件</h2>
+        <div id="releaseNotesBlock" class="release-notes-block hidden"></div>
         <div id="imagesList" class="images-list">
           <p class="hint">加载中...</p>
         </div>
@@ -62,6 +65,24 @@
       </div>
       <div id="adminPanel" class="hidden">
         <p class="hint">已登录 · <button type="button" id="adminLogout" class="text-btn">退出</button></p>
+        <h3>更新公告</h3>
+        <p class="hint">显示在网站顶部；留空并保存则隐藏公告栏</p>
+        <div class="form-row">
+          <textarea id="adminAnnouncement" rows="3" placeholder="公告内容，支持多行"></textarea>
+        </div>
+        <button type="button" id="adminAnnouncementSave">保存公告</button>
+        <h3>每日构建发布说明</h3>
+        <p class="hint">选择日期后编辑说明，将显示在该日镜像列表上方；留空保存可删除说明</p>
+        <div class="form-row">
+          <label>构建日期</label>
+          <select id="releaseNotesDate">
+            <option value="">选择日期</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <textarea id="releaseNotesContent" rows="5" placeholder="发布说明"></textarea>
+        </div>
+        <button type="button" id="releaseNotesSave">保存发布说明</button>
         <h3>上传镜像</h3>
         <p class="hint">选择文件后上传，勾选「固定发布」则保存到左侧栏，否则保存到当日目录，重名自动加后缀</p>
         <div class="form-row form-row-inline">

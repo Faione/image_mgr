@@ -23,6 +23,38 @@ async function fetchJSON(url) {
   return r.json();
 }
 
+async function loadAnnouncement() {
+  const bar = document.getElementById('announcementBar');
+  if (!bar) return;
+  try {
+    const r = await fetch(`${API}/announcement`);
+    const data = r.ok ? await r.json() : {};
+    const t = (data.content || '').trim();
+    if (t) {
+      bar.textContent = t;
+      bar.classList.remove('hidden');
+    } else {
+      bar.textContent = '';
+      bar.classList.add('hidden');
+    }
+  } catch (_) {
+    bar.classList.add('hidden');
+  }
+}
+
+function setReleaseNotesBlock(text) {
+  const el = document.getElementById('releaseNotesBlock');
+  if (!el) return;
+  const t = (text || '').trim();
+  if (t) {
+    el.textContent = t;
+    el.classList.remove('hidden');
+  } else {
+    el.textContent = '';
+    el.classList.add('hidden');
+  }
+}
+
 async function loadStableImages() {
   const list = document.getElementById('stableImagesList');
   if (!list) return;
@@ -71,8 +103,13 @@ async function loadImages(date) {
   if (date) {
     title.textContent = `镜像文件 - ${date}`;
     list.innerHTML = '<p class="hint">加载中...</p>';
+    setReleaseNotesBlock('');
     try {
-      const images = await fetchJSON(`${API}/images?date=${date}`);
+      const [images, notesRes] = await Promise.all([
+        fetchJSON(`${API}/images?date=${date}`),
+        fetch(`${API}/release-notes?date=${encodeURIComponent(date)}`).then(r => r.ok ? r.json() : { content: '' }),
+      ]);
+      setReleaseNotesBlock(notesRes.content || '');
       if (!images.length) {
         list.innerHTML = '<p class="hint">该日期暂无镜像</p>';
         return;
@@ -84,6 +121,7 @@ async function loadImages(date) {
     return;
   }
 
+  setReleaseNotesBlock('');
   title.textContent = '全部镜像';
   await loadAllImages(0, true);
 }
@@ -112,6 +150,7 @@ async function loadAllImages(offset, replace) {
         list.innerHTML = items.map(g => `
           <div class="date-group">
             <div class="date-group-title">${escapeHtml(g.date)}</div>
+            ${(g.notes || '').trim() ? `<div class="group-release-notes">${escapeHtml((g.notes || '').trim())}</div>` : ''}
             ${(g.images || []).map(renderImageItem).join('')}
           </div>
         `).join('');
@@ -121,6 +160,7 @@ async function loadAllImages(offset, replace) {
       const frag = items.map(g => `
         <div class="date-group">
           <div class="date-group-title">${escapeHtml(g.date)}</div>
+          ${(g.notes || '').trim() ? `<div class="group-release-notes">${escapeHtml((g.notes || '').trim())}</div>` : ''}
           ${(g.images || []).map(renderImageItem).join('')}
         </div>
       `).join('');
@@ -156,7 +196,7 @@ function doRefresh() {
   hint.textContent = '刷新中...';
   hint.classList.add('refreshing');
   const date = document.getElementById('dateSelect').value;
-  Promise.all([loadStableImages(), loadImages(date)]).then(() => {
+  Promise.all([loadStableImages(), loadImages(date), loadAnnouncement()]).then(() => {
     hint.textContent = '下拉刷新';
     hint.classList.remove('refreshing');
   });
@@ -308,6 +348,7 @@ async function initAdminPage() {
       loadBuildLog();
       setupAdminUpload();
       setupBuildFormInAdmin();
+      setupAdminNewsForms();
       document.getElementById('adminLogout').onclick = () => {
         setAdminToken('');
         panelEl.classList.add('hidden');
@@ -335,12 +376,106 @@ async function initAdminPage() {
     loadBuildLog();
     setupAdminUpload();
     setupBuildFormInAdmin();
+    setupAdminNewsForms();
     document.getElementById('adminLogout').onclick = () => {
       setAdminToken('');
       panelEl.classList.add('hidden');
       loginEl.classList.remove('hidden');
     };
   };
+}
+
+async function loadAdminAnnouncementField() {
+  const ta = document.getElementById('adminAnnouncement');
+  if (!ta) return;
+  try {
+    const r = await fetch(`${API}/announcement`);
+    const data = r.ok ? await r.json() : {};
+    ta.value = data.content || '';
+  } catch (_) {}
+}
+
+async function populateReleaseNotesDateSelect() {
+  const sel = document.getElementById('releaseNotesDate');
+  if (!sel) return;
+  try {
+    const dates = await fetchJSON(`${API}/dates`);
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">选择日期</option>' + dates.map(d => `<option value="${d}">${d}</option>`).join('');
+    if (cur && dates.includes(cur)) sel.value = cur;
+  } catch (_) {
+    sel.innerHTML = '<option value="">选择日期</option>';
+  }
+}
+
+async function loadReleaseNotesEditor() {
+  const date = document.getElementById('releaseNotesDate')?.value;
+  const ta = document.getElementById('releaseNotesContent');
+  if (!ta) return;
+  if (!date) {
+    ta.value = '';
+    return;
+  }
+  try {
+    const r = await fetch(`${API}/release-notes?date=${encodeURIComponent(date)}`);
+    const data = r.ok ? await r.json() : {};
+    ta.value = data.content || '';
+  } catch (_) {
+    ta.value = '';
+  }
+}
+
+function setupAdminNewsForms() {
+  loadAdminAnnouncementField();
+  populateReleaseNotesDateSelect();
+
+  const sel = document.getElementById('releaseNotesDate');
+  if (sel) sel.onchange = () => loadReleaseNotesEditor();
+
+  const saveAnn = document.getElementById('adminAnnouncementSave');
+  if (saveAnn) {
+    saveAnn.onclick = async () => {
+      const content = document.getElementById('adminAnnouncement')?.value || '';
+      const r = await fetchWithAdmin(`${API}/admin/announcement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+      if (r.ok) {
+        await loadAnnouncement();
+        alert('公告已保存');
+      } else {
+        const err = await r.json().catch(() => ({}));
+        alert(err.error || '保存失败');
+      }
+    };
+  }
+
+  const saveNotes = document.getElementById('releaseNotesSave');
+  if (saveNotes) {
+    saveNotes.onclick = async () => {
+      const date = document.getElementById('releaseNotesDate')?.value;
+      if (!date) {
+        alert('请先选择构建日期');
+        return;
+      }
+      const content = document.getElementById('releaseNotesContent')?.value || '';
+      const r = await fetchWithAdmin(`${API}/admin/release-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, content }),
+      });
+      if (r.ok) {
+        const ds = document.getElementById('dateSelect');
+        if (ds && ds.value === date) await loadImages(date);
+        if (!ds || !ds.value) await loadAllImages(0, true);
+        alert('发布说明已保存');
+      } else {
+        const err = await r.json().catch(() => ({}));
+        alert(err.error || '保存失败');
+      }
+    };
+  }
 }
 
 async function loadAdminImages() {
@@ -466,6 +601,7 @@ function route() {
   const path = location.pathname;
   const app = document.getElementById('app');
   const adminApp = document.getElementById('admin-app');
+  loadAnnouncement();
   document.querySelectorAll('.nav-link').forEach(a => {
     a.classList.toggle('active', (path === '/' && a.href.endsWith('/')) || (path === '/admin' && a.href.endsWith('/admin')));
   });

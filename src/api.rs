@@ -44,9 +44,56 @@ pub struct CreateBuildBody {
     pub script: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ReleaseNotesQuery {
+    date: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AnnouncementBody {
+    pub content: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReleaseNotesBody {
+    pub date: String,
+    pub content: String,
+}
+
 pub async fn index() -> Response {
     let html = include_str!("../frontend/index.html");
     Html(html).into_response()
+}
+
+/// 站点更新公告（公开）
+pub async fn get_announcement(State(state): State<AppState>) -> impl IntoResponse {
+    let content = state.storage.get_announcement().await;
+    axum::Json(serde_json::json!({ "content": content }))
+}
+
+/// 指定日期的发布说明（公开）
+pub async fn get_release_notes(
+    State(state): State<AppState>,
+    Query(q): Query<ReleaseNotesQuery>,
+) -> impl IntoResponse {
+    let date = match q.date {
+        Some(ref d) if !d.is_empty() => d.clone(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                axum::Json(serde_json::json!({ "error": "缺少 date 参数" })),
+            )
+                .into_response();
+        }
+    };
+    match state.storage.get_release_notes(&date).await {
+        Ok(n) => axum::Json(serde_json::json!({ "content": n.unwrap_or_default() })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
 }
 
 pub async fn list_dates(State(state): State<AppState>) -> impl IntoResponse {
@@ -67,24 +114,33 @@ pub async fn list_all_images(
     let limit = q.limit.min(50);
     match state.storage.list_all_grouped(q.offset, limit).await {
         Ok(groups) => {
-            let items: Vec<serde_json::Value> = groups
-                .into_iter()
-                .map(|(date, images)| {
-                    let list: Vec<ImageResponse> = images
-                        .into_iter()
-                        .map(|i| {
-                            let filename = i.filename.clone();
-                            ImageResponse {
-                                filename: filename.clone(),
-                                size: i.size,
-                                modified: i.modified.to_rfc3339(),
-                                url: format!("/api/download/{}/{}", date, filename),
-                            }
-                        })
-                        .collect();
-                    serde_json::json!({ "date": date, "images": list })
-                })
-                .collect();
+            let mut items = Vec::new();
+            for (date, images) in groups {
+                let notes = state
+                    .storage
+                    .get_release_notes(&date)
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+                let list: Vec<ImageResponse> = images
+                    .into_iter()
+                    .map(|i| {
+                        let filename = i.filename.clone();
+                        ImageResponse {
+                            filename: filename.clone(),
+                            size: i.size,
+                            modified: i.modified.to_rfc3339(),
+                            url: format!("/api/download/{}/{}", date, filename),
+                        }
+                    })
+                    .collect();
+                items.push(serde_json::json!({
+                    "date": date,
+                    "images": list,
+                    "notes": notes,
+                }));
+            }
             axum::Json(serde_json::json!({ "items": items, "has_more": items.len() >= limit }))
                 .into_response()
         }
@@ -364,4 +420,52 @@ pub async fn admin_upload(
     }
 
     axum::Json(serde_json::json!({ "saved": saved })).into_response()
+}
+
+/// 保存站点更新公告（需管理员令牌）
+pub async fn admin_set_announcement(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    axum::Json(body): axum::Json<AnnouncementBody>,
+) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let state = match require_admin(State(state), token).await {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+    match state.storage.set_announcement(&body.content).await {
+        Ok(()) => axum::Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// 保存某日期的发布说明（需管理员令牌，留空则删除）
+pub async fn admin_set_release_notes(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    axum::Json(body): axum::Json<ReleaseNotesBody>,
+) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let state = match require_admin(State(state), token).await {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+    match state.storage.set_release_notes(&body.date, &body.content).await {
+        Ok(()) => axum::Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            axum::Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
 }

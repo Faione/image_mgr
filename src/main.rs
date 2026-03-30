@@ -68,6 +68,8 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(api::index))
         .route("/admin", get(api::index))
+        .route("/api/announcement", get(api::get_announcement))
+        .route("/api/release-notes", get(api::get_release_notes))
         .route("/api/dates", get(api::list_dates))
         .route("/api/images/stable", get(api::list_stable_images))
         .route("/api/images/all", get(api::list_all_images))
@@ -78,6 +80,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/admin/verify", get(api::admin_verify))
         .route("/api/admin/image/:date/:filename", delete(api::admin_delete_image))
         .route("/api/admin/upload", post(api::admin_upload))
+        .route("/api/admin/announcement", post(api::admin_set_announcement))
+        .route("/api/admin/release-notes", post(api::admin_set_release_notes))
         .nest_service(
             "/static",
             tower_http::services::ServeDir::new(frontend_dir),
