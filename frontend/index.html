@@ -21,8 +21,21 @@
   <main id="app" class="app-with-sidebar">
     <aside class="left-sidebar">
       <section class="stable-section">
-        <h2>固定发布</h2>
+        <div class="stable-section-head">
+          <h2>固定发布</h2>
+          <button type="button" id="stableEditToggle" class="btn-edit-entry hidden">管理</button>
+        </div>
         <p class="hint">非每日构建的稳定产物，由管理员维护</p>
+        <div id="stableEditPanel" class="date-group-edit-panel hidden">
+          <label class="edit-label">上传到此栏</label>
+          <div id="stableMiniDrop" class="drop-zone drop-zone-compact">
+            <span class="drop-zone-text">拖放文件或点击选择</span>
+          </div>
+          <div class="edit-row">
+            <input type="file" id="stableFileInput" multiple>
+            <button type="button" id="stableUploadBtn">上传</button>
+          </div>
+        </div>
         <div id="stableImagesList" class="images-list">
           <p class="hint">加载中...</p>
         </div>
@@ -46,21 +59,7 @@
             <textarea id="adminAnnouncement" rows="3" placeholder="网站顶部公告"></textarea>
           </div>
           <button type="button" id="adminAnnouncementSave">保存公告</button>
-
-          <h3>产物上传</h3>
-          <p class="hint">勾选固定发布则上传到左侧栏；否则上传到“当前选择日期”（未选择日期时上传到当天）</p>
-          <div class="form-row form-row-inline">
-            <label><input type="checkbox" id="adminUploadToStable"> 固定发布</label>
-          </div>
-          <div id="adminDropZone" class="drop-zone">
-            <span class="drop-zone-text">将文件拖到此处，或点击下方选择文件</span>
-          </div>
-          <form id="adminUploadForm">
-            <div class="form-row">
-              <input type="file" id="adminFileInput" multiple>
-            </div>
-            <button type="submit">上传</button>
-          </form>
+          <p class="hint admin-hint-after">每日产物与发布说明请在下方对应日期条目中点击「管理」进行上传、删除与编辑。</p>
         </div>
       </section>
       <section class="dates-section">
@@ -76,13 +75,6 @@
         <div id="pullHint" class="pull-hint" title="点击刷新">下拉刷新</div>
         <h2 id="imagesTitle">镜像文件</h2>
         <div id="releaseNotesBlock" class="release-notes-block hidden"></div>
-        <div id="releaseNotesEditor" class="release-notes-editor hidden">
-          <div class="form-row">
-            <label>每日发布说明（当前日期）</label>
-            <textarea id="releaseNotesContent" rows="4" placeholder="发布说明"></textarea>
-          </div>
-          <button type="button" id="releaseNotesSave">保存发布说明</button>
-        </div>
         <div id="imagesList" class="images-list">
           <p class="hint">加载中...</p>
         </div>
