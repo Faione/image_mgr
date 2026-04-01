@@ -1,6 +1,8 @@
 const API = '/api';
 const PAGE_SIZE = 5;
 const THEME_KEY = 'theme';
+let IS_ADMIN_VIEW = false;
+let IS_ADMIN_AUTH = false;
 
 function initTheme() {
   let theme = localStorage.getItem(THEME_KEY) || 'light';
@@ -66,7 +68,8 @@ async function loadStableImages() {
       list.innerHTML = '<p class="hint">暂无固定发布</p>';
       return;
     }
-    list.innerHTML = images.map(renderImageItem).join('');
+    list.innerHTML = images.map(img => renderImageItem(img, 'stable')).join('');
+    bindDeleteButtons(list);
   } catch (e) {
     list.innerHTML = '<p class="hint">加载失败</p>';
   }
@@ -84,12 +87,14 @@ async function loadDates() {
   }
 }
 
-function renderImageItem(img) {
+function renderImageItem(img, date) {
+  const d = date || '';
   return `
     <div class="image-item">
       <span class="name">${escapeHtml(img.filename)}</span>
       <span class="meta">${formatSize(img.size)} · ${img.modified.slice(0, 19)}</span>
       <a href="${img.url}" download>下载</a>
+      ${renderDeleteButton(d, img.filename)}
     </div>
   `;
 }
@@ -114,7 +119,8 @@ async function loadImages(date) {
         list.innerHTML = '<p class="hint">该日期暂无镜像</p>';
         return;
       }
-      list.innerHTML = images.map(renderImageItem).join('');
+      list.innerHTML = images.map(img => renderImageItem(img, date)).join('');
+      bindDeleteButtons(list);
     } catch (e) {
       list.innerHTML = '<p class="hint">加载失败</p>';
     }
@@ -151,9 +157,10 @@ async function loadAllImages(offset, replace) {
           <div class="date-group">
             <div class="date-group-title">${escapeHtml(g.date)}</div>
             ${(g.notes || '').trim() ? `<div class="group-release-notes">${escapeHtml((g.notes || '').trim())}</div>` : ''}
-            ${(g.images || []).map(renderImageItem).join('')}
+            ${(g.images || []).map(img => renderImageItem(img, g.date)).join('')}
           </div>
         `).join('');
+        bindDeleteButtons(list);
       }
     } else {
       allImagesOffset += items.length;
@@ -161,7 +168,7 @@ async function loadAllImages(offset, replace) {
         <div class="date-group">
           <div class="date-group-title">${escapeHtml(g.date)}</div>
           ${(g.notes || '').trim() ? `<div class="group-release-notes">${escapeHtml((g.notes || '').trim())}</div>` : ''}
-          ${(g.images || []).map(renderImageItem).join('')}
+          ${(g.images || []).map(img => renderImageItem(img, g.date)).join('')}
         </div>
       `).join('');
       if (list.querySelector('.date-group')) {
@@ -169,6 +176,7 @@ async function loadAllImages(offset, replace) {
       } else {
         list.innerHTML = items.length ? frag : '<p class="hint">暂无镜像</p>';
       }
+      bindDeleteButtons(list);
     }
 
     loadMoreWrap.classList.toggle('hidden', !data.has_more);
@@ -189,6 +197,30 @@ function escapeHtml(s) {
   const div = document.createElement('div');
   div.textContent = s;
   return div.innerHTML;
+}
+
+function renderDeleteButton(date, filename) {
+  if (!IS_ADMIN_VIEW || !IS_ADMIN_AUTH) return '';
+  return `<button type="button" class="btn-delete" data-date="${escapeHtml(date)}" data-filename="${escapeHtml(filename)}">删除</button>`;
+}
+
+function bindDeleteButtons(root) {
+  if (!root) return;
+  root.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('确定删除该镜像？')) return;
+      const date = btn.dataset.date;
+      const filename = btn.dataset.filename;
+      const r = await fetchWithAdmin(`${API}/admin/image/${date}/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      if (r.ok) {
+        const currentDate = document.getElementById('dateSelect')?.value || '';
+        await Promise.all([loadStableImages(), loadImages(currentDate)]);
+      } else {
+        const err = await r.json().catch(() => ({}));
+        alert(err.error || '删除失败');
+      }
+    };
+  });
 }
 
 function doRefresh() {
@@ -237,6 +269,9 @@ function initImagesPage() {
   select.onchange = () => {
     const date = select.value;
     loadImages(date);
+    if (IS_ADMIN_VIEW && IS_ADMIN_AUTH) {
+      loadReleaseNotesEditor();
+    }
   };
   loadImages(''); // 默认加载全部
   setupPullRefresh();
@@ -344,15 +379,24 @@ async function initAdminPage() {
     if (ok) {
       loginEl.classList.add('hidden');
       panelEl.classList.remove('hidden');
-      loadAdminImages();
+      IS_ADMIN_AUTH = true;
+      const currentDate = document.getElementById('dateSelect')?.value || '';
+      Promise.all([loadStableImages(), loadImages(currentDate)]);
+      document.getElementById('releaseNotesEditor')?.classList.remove('hidden');
+      document.getElementById('buildAdminBlock')?.classList.remove('hidden');
       loadBuildLog();
       setupAdminUpload();
       setupBuildFormInAdmin();
       setupAdminNewsForms();
       document.getElementById('adminLogout').onclick = () => {
         setAdminToken('');
+        IS_ADMIN_AUTH = false;
         panelEl.classList.add('hidden');
         loginEl.classList.remove('hidden');
+        document.getElementById('releaseNotesEditor')?.classList.add('hidden');
+        document.getElementById('buildAdminBlock')?.classList.add('hidden');
+        const d = document.getElementById('dateSelect')?.value || '';
+        Promise.all([loadStableImages(), loadImages(d)]);
       };
       return;
     }
@@ -372,15 +416,24 @@ async function initAdminPage() {
     tokenInput.value = '';
     loginEl.classList.add('hidden');
     panelEl.classList.remove('hidden');
-    loadAdminImages();
+    IS_ADMIN_AUTH = true;
+    const currentDate = document.getElementById('dateSelect')?.value || '';
+    Promise.all([loadStableImages(), loadImages(currentDate)]);
+    document.getElementById('releaseNotesEditor')?.classList.remove('hidden');
+    document.getElementById('buildAdminBlock')?.classList.remove('hidden');
     loadBuildLog();
     setupAdminUpload();
     setupBuildFormInAdmin();
     setupAdminNewsForms();
     document.getElementById('adminLogout').onclick = () => {
       setAdminToken('');
+      IS_ADMIN_AUTH = false;
       panelEl.classList.add('hidden');
       loginEl.classList.remove('hidden');
+      document.getElementById('releaseNotesEditor')?.classList.add('hidden');
+      document.getElementById('buildAdminBlock')?.classList.add('hidden');
+      const d = document.getElementById('dateSelect')?.value || '';
+      Promise.all([loadStableImages(), loadImages(d)]);
     };
   };
 }
@@ -395,21 +448,8 @@ async function loadAdminAnnouncementField() {
   } catch (_) {}
 }
 
-async function populateReleaseNotesDateSelect() {
-  const sel = document.getElementById('releaseNotesDate');
-  if (!sel) return;
-  try {
-    const dates = await fetchJSON(`${API}/dates`);
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">选择日期</option>' + dates.map(d => `<option value="${d}">${d}</option>`).join('');
-    if (cur && dates.includes(cur)) sel.value = cur;
-  } catch (_) {
-    sel.innerHTML = '<option value="">选择日期</option>';
-  }
-}
-
 async function loadReleaseNotesEditor() {
-  const date = document.getElementById('releaseNotesDate')?.value;
+  const date = document.getElementById('dateSelect')?.value;
   const ta = document.getElementById('releaseNotesContent');
   if (!ta) return;
   if (!date) {
@@ -427,10 +467,7 @@ async function loadReleaseNotesEditor() {
 
 function setupAdminNewsForms() {
   loadAdminAnnouncementField();
-  populateReleaseNotesDateSelect();
-
-  const sel = document.getElementById('releaseNotesDate');
-  if (sel) sel.onchange = () => loadReleaseNotesEditor();
+  loadReleaseNotesEditor();
 
   const saveAnn = document.getElementById('adminAnnouncementSave');
   if (saveAnn) {
@@ -454,7 +491,7 @@ function setupAdminNewsForms() {
   const saveNotes = document.getElementById('releaseNotesSave');
   if (saveNotes) {
     saveNotes.onclick = async () => {
-      const date = document.getElementById('releaseNotesDate')?.value;
+      const date = document.getElementById('dateSelect')?.value;
       if (!date) {
         alert('请先选择构建日期');
         return;
@@ -478,52 +515,6 @@ function setupAdminNewsForms() {
   }
 }
 
-async function loadAdminImages() {
-  const list = document.getElementById('adminImagesList');
-  list.innerHTML = '<p class="hint">加载中...</p>';
-  try {
-    const [stableImages, allData] = await Promise.all([
-      fetchJSON(`${API}/images/stable`).catch(() => []),
-      fetchJSON(`${API}/images/all?offset=0&limit=100`).catch(() => ({ items: [] })),
-    ]);
-    const items = allData.items || [];
-    const groups = [];
-    if (stableImages && stableImages.length) {
-      groups.push({ date: '固定发布', images: stableImages });
-    }
-    groups.push(...items);
-    if (!groups.length) {
-      list.innerHTML = '<p class="hint">暂无镜像</p>';
-      return;
-    }
-    list.innerHTML = groups.map(g => `
-      <div class="date-group">
-        <div class="date-group-title">${escapeHtml(g.date)}</div>
-        ${(g.images || []).map(img => `
-          <div class="image-item" data-date="${escapeHtml(g.date === '固定发布' ? 'stable' : g.date)}" data-filename="${escapeHtml(img.filename)}">
-            <span class="name">${escapeHtml(img.filename)}</span>
-            <span class="meta">${formatSize(img.size)}</span>
-            <a href="${img.url}" download>下载</a>
-            <button type="button" class="btn-delete" data-date="${escapeHtml(g.date === '固定发布' ? 'stable' : g.date)}" data-filename="${escapeHtml(img.filename)}">删除</button>
-          </div>
-        `).join('')}
-      </div>
-    `).join('');
-    list.querySelectorAll('.btn-delete').forEach(btn => {
-      btn.onclick = async () => {
-        if (!confirm('确定删除该镜像？')) return;
-        const date = btn.dataset.date;
-        const filename = btn.dataset.filename;
-        const r = await fetchWithAdmin(`${API}/admin/image/${date}/${encodeURIComponent(filename)}`, { method: 'DELETE' });
-        if (r.ok) loadAdminImages();
-        else alert((await r.json()).error || '删除失败');
-      };
-    });
-  } catch (e) {
-    list.innerHTML = '<p class="hint">加载失败</p>';
-  }
-}
-
 async function doAdminUpload(files) {
   if (!files || !files.length) return;
   const form = document.getElementById('adminUploadForm');
@@ -536,13 +527,15 @@ async function doAdminUpload(files) {
   try {
     const fd = new FormData();
     for (let i = 0; i < files.length; i++) fd.append('file', files[i]);
-    const url = toStable ? `${API}/admin/upload?target=stable` : `${API}/admin/upload`;
+    const selectedDate = document.getElementById('dateSelect')?.value || '';
+    const target = toStable ? 'stable' : (selectedDate || '');
+    const url = target ? `${API}/admin/upload?target=${encodeURIComponent(target)}` : `${API}/admin/upload`;
     const r = await fetchWithAdmin(url, { method: 'POST', body: fd });
     const data = await r.json().catch(() => ({}));
     if (r.ok && data.saved && data.saved.length) {
       document.getElementById('adminFileInput').value = '';
-      loadAdminImages();
-      if (toStable) loadStableImages();
+      const d = document.getElementById('dateSelect')?.value || '';
+      await Promise.all([loadStableImages(), loadImages(d)]);
       alert(`已上传 ${data.saved.length} 个文件`);
     } else if (!r.ok) {
       alert(data.error || '上传失败');
@@ -600,20 +593,25 @@ function setupAdminUpload() {
 function route() {
   const path = location.pathname;
   const app = document.getElementById('app');
-  const adminApp = document.getElementById('admin-app');
+  const adminInline = document.getElementById('adminInlineSection');
+  const releaseEditor = document.getElementById('releaseNotesEditor');
+  const buildBlock = document.getElementById('buildAdminBlock');
+  IS_ADMIN_VIEW = path === '/admin';
   loadAnnouncement();
   document.querySelectorAll('.nav-link').forEach(a => {
     a.classList.toggle('active', (path === '/' && a.href.endsWith('/')) || (path === '/admin' && a.href.endsWith('/admin')));
   });
-  if (path === '/admin') {
-    app.classList.add('hidden');
-    adminApp.classList.remove('hidden');
+  app.classList.remove('hidden');
+  if (IS_ADMIN_VIEW) {
+    adminInline.classList.remove('hidden');
     initAdminPage();
   } else {
-    app.classList.remove('hidden');
-    adminApp.classList.add('hidden');
-    initImagesPage();
+    IS_ADMIN_AUTH = false;
+    adminInline.classList.add('hidden');
   }
+  releaseEditor.classList.toggle('hidden', !(IS_ADMIN_VIEW && IS_ADMIN_AUTH));
+  buildBlock.classList.toggle('hidden', !(IS_ADMIN_VIEW && IS_ADMIN_AUTH));
+  initImagesPage();
 }
 
 route();

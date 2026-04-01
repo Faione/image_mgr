@@ -398,6 +398,8 @@ pub async fn admin_upload(
 
     let date = if q.target.as_deref() == Some("stable") {
         "stable".to_string()
+    } else if let Some(t) = q.target {
+        t
     } else {
         chrono::Local::now().format("%Y-%m-%d").to_string()
     };

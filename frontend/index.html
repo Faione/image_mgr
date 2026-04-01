@@ -29,6 +29,40 @@
       </section>
     </aside>
     <div class="main-content">
+      <section id="adminInlineSection" class="admin-inline hidden">
+        <h2>管理模式</h2>
+        <div id="adminLogin" class="admin-login">
+          <p class="hint">输入管理员令牌后，可直接在当前页面管理固定发布、每日构建产物、置顶公告与每日发布说明。</p>
+          <div class="form-row">
+            <label>管理员令牌</label>
+            <input type="password" id="adminTokenInput" placeholder="admin_token">
+          </div>
+          <button type="button" id="adminTokenBtn">验证并进入</button>
+        </div>
+        <div id="adminPanel" class="hidden">
+          <p class="hint">已登录 · <button type="button" id="adminLogout" class="text-btn">退出</button></p>
+          <h3>置顶公告</h3>
+          <div class="form-row">
+            <textarea id="adminAnnouncement" rows="3" placeholder="网站顶部公告"></textarea>
+          </div>
+          <button type="button" id="adminAnnouncementSave">保存公告</button>
+
+          <h3>产物上传</h3>
+          <p class="hint">勾选固定发布则上传到左侧栏；否则上传到“当前选择日期”（未选择日期时上传到当天）</p>
+          <div class="form-row form-row-inline">
+            <label><input type="checkbox" id="adminUploadToStable"> 固定发布</label>
+          </div>
+          <div id="adminDropZone" class="drop-zone">
+            <span class="drop-zone-text">将文件拖到此处，或点击下方选择文件</span>
+          </div>
+          <form id="adminUploadForm">
+            <div class="form-row">
+              <input type="file" id="adminFileInput" multiple>
+            </div>
+            <button type="submit">上传</button>
+          </form>
+        </div>
+      </section>
       <section class="dates-section">
         <h2>按日期查看</h2>
         <div class="date-picker">
@@ -42,85 +76,41 @@
         <div id="pullHint" class="pull-hint" title="点击刷新">下拉刷新</div>
         <h2 id="imagesTitle">镜像文件</h2>
         <div id="releaseNotesBlock" class="release-notes-block hidden"></div>
+        <div id="releaseNotesEditor" class="release-notes-editor hidden">
+          <div class="form-row">
+            <label>每日发布说明（当前日期）</label>
+            <textarea id="releaseNotesContent" rows="4" placeholder="发布说明"></textarea>
+          </div>
+          <button type="button" id="releaseNotesSave">保存发布说明</button>
+        </div>
         <div id="imagesList" class="images-list">
           <p class="hint">加载中...</p>
         </div>
         <div id="loadMoreWrap" class="load-more-wrap hidden">
           <button id="loadMoreBtn" class="load-more-btn">加载更多</button>
         </div>
+        <div id="buildAdminBlock" class="build-admin-block hidden">
+          <h3>构建管理</h3>
+          <p class="hint">在 config.toml 中配置定时构建任务，构建脚本需将产物放入 output 目录</p>
+          <form id="buildForm">
+            <div class="form-row">
+              <label>名称</label>
+              <input type="text" name="name" placeholder="build-name" required>
+            </div>
+            <div class="form-row">
+              <label>间隔(分钟)</label>
+              <input type="number" name="interval" value="60" min="1">
+            </div>
+            <div class="form-row">
+              <label>构建脚本</label>
+              <textarea name="script" rows="8" placeholder="#!/bin/bash&#10;mkdir -p output&#10;echo 'sample' > output/sample.txt"></textarea>
+            </div>
+            <button type="submit">立即构建</button>
+          </form>
+          <div id="buildLog" class="build-log"></div>
+        </div>
       </section>
     </div>
-  </main>
-
-  <main id="admin-app" class="hidden">
-    <section class="admin-section">
-      <h2>超级管理员</h2>
-      <div id="adminLogin" class="admin-login">
-        <p class="hint">在 config.toml 中配置 admin_token 后，在此输入令牌以管理镜像（删除/上传）与构建。</p>
-        <div class="form-row">
-          <label>管理员令牌</label>
-          <input type="password" id="adminTokenInput" placeholder="admin_token">
-        </div>
-        <button type="button" id="adminTokenBtn">验证并进入</button>
-      </div>
-      <div id="adminPanel" class="hidden">
-        <p class="hint">已登录 · <button type="button" id="adminLogout" class="text-btn">退出</button></p>
-        <h3>更新公告</h3>
-        <p class="hint">显示在网站顶部；留空并保存则隐藏公告栏</p>
-        <div class="form-row">
-          <textarea id="adminAnnouncement" rows="3" placeholder="公告内容，支持多行"></textarea>
-        </div>
-        <button type="button" id="adminAnnouncementSave">保存公告</button>
-        <h3>每日构建发布说明</h3>
-        <p class="hint">选择日期后编辑说明，将显示在该日镜像列表上方；留空保存可删除说明</p>
-        <div class="form-row">
-          <label>构建日期</label>
-          <select id="releaseNotesDate">
-            <option value="">选择日期</option>
-          </select>
-        </div>
-        <div class="form-row">
-          <textarea id="releaseNotesContent" rows="5" placeholder="发布说明"></textarea>
-        </div>
-        <button type="button" id="releaseNotesSave">保存发布说明</button>
-        <h3>上传镜像</h3>
-        <p class="hint">选择文件后上传，勾选「固定发布」则保存到左侧栏，否则保存到当日目录，重名自动加后缀</p>
-        <div class="form-row form-row-inline">
-          <label><input type="checkbox" id="adminUploadToStable"> 固定发布</label>
-        </div>
-        <div id="adminDropZone" class="drop-zone">
-          <span class="drop-zone-text">将文件拖到此处，或点击下方选择文件</span>
-        </div>
-        <form id="adminUploadForm">
-          <div class="form-row">
-            <input type="file" id="adminFileInput" multiple>
-          </div>
-          <button type="submit">上传</button>
-        </form>
-        <h3>已有镜像（可删除）</h3>
-        <div id="adminImagesList" class="images-list"></div>
-        <h3>构建管理</h3>
-        <p class="hint">在 config.toml 中配置定时构建任务，构建脚本需将产物放入 output 目录</p>
-        <h4 class="admin-h4">手动触发构建</h4>
-        <form id="buildForm">
-          <div class="form-row">
-            <label>名称</label>
-            <input type="text" name="name" placeholder="build-name" required>
-          </div>
-          <div class="form-row">
-            <label>间隔(分钟)</label>
-            <input type="number" name="interval" value="60" min="1">
-          </div>
-          <div class="form-row">
-            <label>构建脚本</label>
-            <textarea name="script" rows="8" placeholder="#!/bin/bash&#10;mkdir -p output&#10;echo 'sample' > output/sample.txt"></textarea>
-          </div>
-          <button type="submit">立即构建</button>
-        </form>
-        <h4 class="admin-h4">构建日志</h4>
-        <div id="buildLog" class="build-log"></div>
-      </div>
-    </section>
   </main>
 
   <script src="/static/app.js"></script>
