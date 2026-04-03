@@ -57,6 +57,15 @@ function setReleaseNotesBlock(text) {
   }
 }
 
+function refreshAdminChrome() {
+  const btn = document.getElementById('stableEditToggle');
+  const panel = document.getElementById('stableEditPanel');
+  if (!btn || !panel) return;
+  const show = IS_ADMIN_VIEW && IS_ADMIN_AUTH;
+  btn.classList.toggle('hidden', !show);
+  if (!show) panel.classList.add('hidden');
+}
+
 async function loadStableImages() {
   const list = document.getElementById('stableImagesList');
   if (!list) return;
@@ -66,13 +75,14 @@ async function loadStableImages() {
     const images = Array.isArray(data) ? data : [];
     if (!images.length) {
       list.innerHTML = '<p class="hint">暂无固定发布</p>';
-      return;
+    } else {
+      list.innerHTML = images.map(img => renderImageItem(img, 'stable')).join('');
+      bindDeleteButtons(list);
     }
-    list.innerHTML = images.map(img => renderImageItem(img, 'stable')).join('');
-    bindDeleteButtons(list);
   } catch (e) {
     list.innerHTML = '<p class="hint">加载失败</p>';
   }
+  refreshAdminChrome();
 }
 
 async function loadDates() {
@@ -112,15 +122,12 @@ async function loadImages(date) {
     try {
       const [images, notesRes] = await Promise.all([
         fetchJSON(`${API}/images?date=${date}`),
-        fetch(`${API}/release-notes?date=${encodeURIComponent(date)}`).then(r => r.ok ? r.json() : { content: '' }),
+        fetch(`${API}/release-notes?date=${encodeURIComponent(date)}`).then(r => (r.ok ? r.json() : { content: '' })),
       ]);
-      setReleaseNotesBlock(notesRes.content || '');
-      if (!images.length) {
-        list.innerHTML = '<p class="hint">该日期暂无镜像</p>';
-        return;
-      }
-      list.innerHTML = images.map(img => renderImageItem(img, date)).join('');
+      const notesTrimmed = (notesRes.content || '').trim();
+      list.innerHTML = renderSingleDateBlock(date, images, notesTrimmed);
       bindDeleteButtons(list);
+      bindDateGroupEditors(list);
     } catch (e) {
       list.innerHTML = '<p class="hint">加载失败</p>';
     }
@@ -153,30 +160,20 @@ async function loadAllImages(offset, replace) {
       if (!items.length) {
         list.innerHTML = '<p class="hint">暂无镜像</p>';
       } else {
-        list.innerHTML = items.map(g => `
-          <div class="date-group">
-            <div class="date-group-title">${escapeHtml(g.date)}</div>
-            ${(g.notes || '').trim() ? `<div class="group-release-notes">${escapeHtml((g.notes || '').trim())}</div>` : ''}
-            ${(g.images || []).map(img => renderImageItem(img, g.date)).join('')}
-          </div>
-        `).join('');
+        list.innerHTML = items.map(g => renderDateGroupBlock(g)).join('');
         bindDeleteButtons(list);
+        bindDateGroupEditors(list);
       }
     } else {
       allImagesOffset += items.length;
-      const frag = items.map(g => `
-        <div class="date-group">
-          <div class="date-group-title">${escapeHtml(g.date)}</div>
-          ${(g.notes || '').trim() ? `<div class="group-release-notes">${escapeHtml((g.notes || '').trim())}</div>` : ''}
-          ${(g.images || []).map(img => renderImageItem(img, g.date)).join('')}
-        </div>
-      `).join('');
+      const frag = items.map(g => renderDateGroupBlock(g)).join('');
       if (list.querySelector('.date-group')) {
         list.insertAdjacentHTML('beforeend', frag);
       } else {
         list.innerHTML = items.length ? frag : '<p class="hint">暂无镜像</p>';
       }
       bindDeleteButtons(list);
+      bindDateGroupEditors(list);
     }
 
     loadMoreWrap.classList.toggle('hidden', !data.has_more);
@@ -202,6 +199,175 @@ function escapeHtml(s) {
 function renderDeleteButton(date, filename) {
   if (!IS_ADMIN_VIEW || !IS_ADMIN_AUTH) return '';
   return `<button type="button" class="btn-delete" data-date="${escapeHtml(date)}" data-filename="${escapeHtml(filename)}">删除</button>`;
+}
+
+function renderDateEditPanel(date, notes) {
+  const d = escapeHtml(date);
+  const n = escapeHtml(notes || '');
+  return `
+    <div class="date-group-edit-panel hidden js-date-edit-panel" data-date="${d}">
+      <label class="edit-label">当日发布说明</label>
+      <textarea class="js-release-notes-ta" rows="3" data-date="${d}">${n}</textarea>
+      <div class="edit-row">
+        <button type="button" class="js-save-release-notes" data-date="${d}">保存说明</button>
+      </div>
+      <label class="edit-label">上传到此日期</label>
+      <div class="drop-zone drop-zone-compact js-date-drop" data-date="${d}" tabindex="0" role="button">
+        <span class="drop-zone-text">拖放文件或点击选择</span>
+      </div>
+      <div class="edit-row">
+        <input type="file" multiple class="js-date-file" data-date="${d}">
+        <button type="button" class="js-date-upload-btn" data-date="${d}">上传</button>
+      </div>
+    </div>`;
+}
+
+function renderDateGroupBlock(g) {
+  const date = g.date;
+  const notes = (g.notes || '').trim();
+  const images = g.images || [];
+  const notesHtml = notes ? `<div class="group-release-notes">${escapeHtml(notes)}</div>` : '';
+  const adminHeader =
+    IS_ADMIN_VIEW && IS_ADMIN_AUTH
+      ? `<div class="date-group-header"><div class="date-group-title">${escapeHtml(date)}</div><button type="button" class="btn-edit-entry js-toggle-date-edit" data-date="${escapeHtml(date)}">管理</button></div>`
+      : `<div class="date-group-title">${escapeHtml(date)}</div>`;
+  const adminPanel = IS_ADMIN_VIEW && IS_ADMIN_AUTH ? renderDateEditPanel(date, notes) : '';
+  const body = images.length
+    ? images.map(img => renderImageItem(img, date)).join('')
+    : '<p class="hint">该日期暂无镜像</p>';
+  return `<div class="date-group" data-date="${escapeHtml(date)}">${adminHeader}${notesHtml}${adminPanel}${body}</div>`;
+}
+
+function renderSingleDateBlock(date, images, notesTrimmed) {
+  const notesHtml = notesTrimmed ? `<div class="group-release-notes">${escapeHtml(notesTrimmed)}</div>` : '';
+  const adminHeader =
+    IS_ADMIN_VIEW && IS_ADMIN_AUTH
+      ? `<div class="date-group-header"><div class="date-group-title">${escapeHtml(date)}</div><button type="button" class="btn-edit-entry js-toggle-date-edit" data-date="${escapeHtml(date)}">管理</button></div>`
+      : `<div class="date-group-title">${escapeHtml(date)}</div>`;
+  const adminPanel = IS_ADMIN_VIEW && IS_ADMIN_AUTH ? renderDateEditPanel(date, notesTrimmed) : '';
+  const body = images.length
+    ? images.map(img => renderImageItem(img, date)).join('')
+    : '<p class="hint">该日期暂无镜像</p>';
+  return `<div class="date-group" data-date="${escapeHtml(date)}">${adminHeader}${notesHtml}${adminPanel}${body}</div>`;
+}
+
+function bindCompactDropZone(dropEl, fileInput, onFiles) {
+  if (!dropEl || !fileInput) return;
+  ['dragenter', 'dragover'].forEach(ev => {
+    dropEl.addEventListener(ev, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropEl.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(ev => {
+    dropEl.addEventListener(ev, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropEl.classList.remove('drag-over');
+    });
+  });
+  dropEl.addEventListener('drop', e => {
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) onFiles(files);
+  });
+  dropEl.addEventListener('click', () => fileInput.click());
+}
+
+function bindDateGroupEditors(root) {
+  if (!root || !IS_ADMIN_VIEW || !IS_ADMIN_AUTH) return;
+  root.querySelectorAll('.js-toggle-date-edit').forEach(btn => {
+    btn.onclick = () => {
+      const group = btn.closest('.date-group');
+      const panel = group && group.querySelector('.js-date-edit-panel');
+      if (panel) panel.classList.toggle('hidden');
+    };
+  });
+  root.querySelectorAll('.js-save-release-notes').forEach(btn => {
+    btn.onclick = async () => {
+      const date = btn.dataset.date;
+      const group = btn.closest('.date-group');
+      const ta = group && group.querySelector('.js-release-notes-ta');
+      const content = ta ? ta.value : '';
+      const r = await fetchWithAdmin(`${API}/admin/release-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, content }),
+      });
+      if (r.ok) {
+        const ds = document.getElementById('dateSelect');
+        const cur = ds && ds.value;
+        if (cur === date) await loadImages(date);
+        else if (!cur) await loadAllImages(0, true);
+        else await loadImages(cur);
+        alert('发布说明已保存');
+      } else {
+        const err = await r.json().catch(() => ({}));
+        alert(err.error || '保存失败');
+      }
+    };
+  });
+  root.querySelectorAll('.js-date-upload-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const group = btn.closest('.date-group');
+      const input = group && group.querySelector('.js-date-file');
+      if (!input) return;
+      await doAdminUploadToTarget(input.files, btn.dataset.date);
+      input.value = '';
+    };
+  });
+  root.querySelectorAll('.js-date-drop').forEach(drop => {
+    if (drop.dataset.dropBound === '1') return;
+    drop.dataset.dropBound = '1';
+    const group = drop.closest('.date-group');
+    const input = group && group.querySelector('.js-date-file');
+    const date = drop.dataset.date;
+    if (!input || !date) return;
+    bindCompactDropZone(drop, input, files => doAdminUploadToTarget(files, date));
+  });
+}
+
+async function doAdminUploadToTarget(files, target) {
+  if (!files || !files.length) {
+    alert('请先选择文件');
+    return;
+  }
+  try {
+    const fd = new FormData();
+    for (let i = 0; i < files.length; i++) fd.append('file', files[i]);
+    const url = `${API}/admin/upload?target=${encodeURIComponent(target)}`;
+    const r = await fetchWithAdmin(url, { method: 'POST', body: fd });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.saved && data.saved.length) {
+      const d = document.getElementById('dateSelect')?.value || '';
+      await Promise.all([loadStableImages(), loadImages(d)]);
+      alert(`已上传 ${data.saved.length} 个文件`);
+    } else if (!r.ok) {
+      alert(data.error || '上传失败');
+    } else {
+      alert('未保存任何文件，请检查格式');
+    }
+  } catch (err) {
+    alert('上传请求失败: ' + (err.message || err));
+  }
+}
+
+let stableAdminBound = false;
+function setupStableAdminPanel() {
+  if (stableAdminBound) return;
+  stableAdminBound = true;
+  const toggle = document.getElementById('stableEditToggle');
+  const panel = document.getElementById('stableEditPanel');
+  const drop = document.getElementById('stableMiniDrop');
+  const input = document.getElementById('stableFileInput');
+  const btn = document.getElementById('stableUploadBtn');
+  if (!toggle || !panel || !drop || !input || !btn) return;
+  toggle.onclick = () => panel.classList.toggle('hidden');
+  btn.onclick = async () => {
+    await doAdminUploadToTarget(input.files, 'stable');
+    input.value = '';
+  };
+  bindCompactDropZone(drop, input, files => doAdminUploadToTarget(files, 'stable'));
 }
 
 function bindDeleteButtons(root) {
@@ -269,9 +435,6 @@ function initImagesPage() {
   select.onchange = () => {
     const date = select.value;
     loadImages(date);
-    if (IS_ADMIN_VIEW && IS_ADMIN_AUTH) {
-      loadReleaseNotesEditor();
-    }
   };
   loadImages(''); // 默认加载全部
   setupPullRefresh();
@@ -382,20 +545,20 @@ async function initAdminPage() {
       IS_ADMIN_AUTH = true;
       const currentDate = document.getElementById('dateSelect')?.value || '';
       Promise.all([loadStableImages(), loadImages(currentDate)]);
-      document.getElementById('releaseNotesEditor')?.classList.remove('hidden');
       document.getElementById('buildAdminBlock')?.classList.remove('hidden');
       loadBuildLog();
-      setupAdminUpload();
+      setupStableAdminPanel();
       setupBuildFormInAdmin();
       setupAdminNewsForms();
+      refreshAdminChrome();
       document.getElementById('adminLogout').onclick = () => {
         setAdminToken('');
         IS_ADMIN_AUTH = false;
         panelEl.classList.add('hidden');
         loginEl.classList.remove('hidden');
-        document.getElementById('releaseNotesEditor')?.classList.add('hidden');
         document.getElementById('buildAdminBlock')?.classList.add('hidden');
         const d = document.getElementById('dateSelect')?.value || '';
+        refreshAdminChrome();
         Promise.all([loadStableImages(), loadImages(d)]);
       };
       return;
@@ -419,20 +582,20 @@ async function initAdminPage() {
     IS_ADMIN_AUTH = true;
     const currentDate = document.getElementById('dateSelect')?.value || '';
     Promise.all([loadStableImages(), loadImages(currentDate)]);
-    document.getElementById('releaseNotesEditor')?.classList.remove('hidden');
     document.getElementById('buildAdminBlock')?.classList.remove('hidden');
     loadBuildLog();
-    setupAdminUpload();
+    setupStableAdminPanel();
     setupBuildFormInAdmin();
     setupAdminNewsForms();
+    refreshAdminChrome();
     document.getElementById('adminLogout').onclick = () => {
       setAdminToken('');
       IS_ADMIN_AUTH = false;
       panelEl.classList.add('hidden');
       loginEl.classList.remove('hidden');
-      document.getElementById('releaseNotesEditor')?.classList.add('hidden');
       document.getElementById('buildAdminBlock')?.classList.add('hidden');
       const d = document.getElementById('dateSelect')?.value || '';
+      refreshAdminChrome();
       Promise.all([loadStableImages(), loadImages(d)]);
     };
   };
@@ -448,26 +611,8 @@ async function loadAdminAnnouncementField() {
   } catch (_) {}
 }
 
-async function loadReleaseNotesEditor() {
-  const date = document.getElementById('dateSelect')?.value;
-  const ta = document.getElementById('releaseNotesContent');
-  if (!ta) return;
-  if (!date) {
-    ta.value = '';
-    return;
-  }
-  try {
-    const r = await fetch(`${API}/release-notes?date=${encodeURIComponent(date)}`);
-    const data = r.ok ? await r.json() : {};
-    ta.value = data.content || '';
-  } catch (_) {
-    ta.value = '';
-  }
-}
-
 function setupAdminNewsForms() {
   loadAdminAnnouncementField();
-  loadReleaseNotesEditor();
 
   const saveAnn = document.getElementById('adminAnnouncementSave');
   if (saveAnn) {
@@ -487,114 +632,12 @@ function setupAdminNewsForms() {
       }
     };
   }
-
-  const saveNotes = document.getElementById('releaseNotesSave');
-  if (saveNotes) {
-    saveNotes.onclick = async () => {
-      const date = document.getElementById('dateSelect')?.value;
-      if (!date) {
-        alert('请先选择构建日期');
-        return;
-      }
-      const content = document.getElementById('releaseNotesContent')?.value || '';
-      const r = await fetchWithAdmin(`${API}/admin/release-notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, content }),
-      });
-      if (r.ok) {
-        const ds = document.getElementById('dateSelect');
-        if (ds && ds.value === date) await loadImages(date);
-        if (!ds || !ds.value) await loadAllImages(0, true);
-        alert('发布说明已保存');
-      } else {
-        const err = await r.json().catch(() => ({}));
-        alert(err.error || '保存失败');
-      }
-    };
-  }
-}
-
-async function doAdminUpload(files) {
-  if (!files || !files.length) return;
-  const form = document.getElementById('adminUploadForm');
-  const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
-  const toStable = document.getElementById('adminUploadToStable') && document.getElementById('adminUploadToStable').checked;
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.textContent = '上传中...';
-  }
-  try {
-    const fd = new FormData();
-    for (let i = 0; i < files.length; i++) fd.append('file', files[i]);
-    const selectedDate = document.getElementById('dateSelect')?.value || '';
-    const target = toStable ? 'stable' : (selectedDate || '');
-    const url = target ? `${API}/admin/upload?target=${encodeURIComponent(target)}` : `${API}/admin/upload`;
-    const r = await fetchWithAdmin(url, { method: 'POST', body: fd });
-    const data = await r.json().catch(() => ({}));
-    if (r.ok && data.saved && data.saved.length) {
-      document.getElementById('adminFileInput').value = '';
-      const d = document.getElementById('dateSelect')?.value || '';
-      await Promise.all([loadStableImages(), loadImages(d)]);
-      alert(`已上传 ${data.saved.length} 个文件`);
-    } else if (!r.ok) {
-      alert(data.error || '上传失败');
-    } else {
-      alert('未保存任何文件，请检查格式');
-    }
-  } catch (err) {
-    alert('上传请求失败: ' + (err.message || err));
-  } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = '上传';
-    }
-  }
-}
-
-function setupAdminUpload() {
-  const form = document.getElementById('adminUploadForm');
-  const fileInput = document.getElementById('adminFileInput');
-  const dropZone = document.getElementById('adminDropZone');
-
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const files = fileInput.files;
-    if (!files || !files.length) {
-      alert('请先选择文件');
-      return;
-    }
-    await doAdminUpload(files);
-  };
-
-  if (dropZone) {
-    ['dragenter', 'dragover'].forEach(ev => {
-      dropZone.addEventListener(ev, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropZone.classList.add('drag-over');
-      });
-    });
-    ['dragleave', 'drop'].forEach(ev => {
-      dropZone.addEventListener(ev, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropZone.classList.remove('drag-over');
-      });
-    });
-    dropZone.addEventListener('drop', (e) => {
-      const files = e.dataTransfer && e.dataTransfer.files;
-      if (files && files.length) doAdminUpload(files);
-    });
-    dropZone.addEventListener('click', () => fileInput.click());
-  }
 }
 
 function route() {
   const path = location.pathname;
   const app = document.getElementById('app');
   const adminInline = document.getElementById('adminInlineSection');
-  const releaseEditor = document.getElementById('releaseNotesEditor');
   const buildBlock = document.getElementById('buildAdminBlock');
   IS_ADMIN_VIEW = path === '/admin';
   loadAnnouncement();
@@ -609,8 +652,8 @@ function route() {
     IS_ADMIN_AUTH = false;
     adminInline.classList.add('hidden');
   }
-  releaseEditor.classList.toggle('hidden', !(IS_ADMIN_VIEW && IS_ADMIN_AUTH));
-  buildBlock.classList.toggle('hidden', !(IS_ADMIN_VIEW && IS_ADMIN_AUTH));
+  if (buildBlock) buildBlock.classList.toggle('hidden', !(IS_ADMIN_VIEW && IS_ADMIN_AUTH));
+  refreshAdminChrome();
   initImagesPage();
 }
 
