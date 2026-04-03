@@ -414,8 +414,9 @@ h2 {
 
 .image-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border);
 }
@@ -424,26 +425,55 @@ h2 {
   border-bottom: none;
 }
 
-.image-item .name {
+.image-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.image-main .name {
   font-family: ui-monospace, monospace;
+  font-size: 0.88rem;
+  word-break: break-all;
+  margin-bottom: 0.15rem;
 }
 
-.image-item .meta {
+.image-main .meta {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
-.image-item a {
+.image-main .meta-size {
+  white-space: nowrap;
+}
+
+.image-main .meta-time {
+  white-space: nowrap;
+}
+
+.image-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.image-actions .btn-download,
+.image-actions .btn-delete {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  border-radius: 999px;
+}
+
+.image-actions .btn-download {
   color: var(--accent);
   text-decoration: none;
-  padding: 0.35rem 0.75rem;
-  border-radius: 6px;
   border: 1px solid var(--accent);
-  font-size: 0.85rem;
+  background: transparent;
 }
 
-.image-item a:hover {
-  background: rgba(88, 166, 255, 0.1);
+.image-actions .btn-download:hover {
+  background: rgba(88, 166, 255, 0.08);
 }
 
 .hint {
@@ -670,9 +700,7 @@ button:hover {
 .text-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; font-size: inherit; }
 .text-btn:hover { color: var(--accent); }
 .image-item .btn-delete {
-  margin-left: 0.5rem;
-  padding: 0.25rem 0.55rem;
-  font-size: 0.75rem;
+  margin-left: 0;
   font-weight: 600;
   border: 1px solid #b91c1c;
   color: #fff;

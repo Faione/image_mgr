@@ -99,12 +99,22 @@ async function loadDates() {
 
 function renderImageItem(img, date) {
   const d = date || '';
+  const sizeText = formatSize(img.size);
+  const timeText = img.modified.slice(0, 19);
   return `
     <div class="image-item">
-      <span class="name">${escapeHtml(img.filename)}</span>
-      <span class="meta">${formatSize(img.size)} · ${img.modified.slice(0, 19)}</span>
-      <a href="${img.url}" download>下载</a>
-      ${renderDeleteButton(d, img.filename)}
+      <div class="image-main">
+        <div class="name">${escapeHtml(img.filename)}</div>
+        <div class="meta">
+          <span class="meta-size">${sizeText}</span>
+          <span class="meta-sep">·</span>
+          <span class="meta-time">${timeText}</span>
+        </div>
+      </div>
+      <div class="image-actions">
+        <a href="${img.url}" download class="btn-download">下载</a>
+        ${renderDeleteButton(d, img.filename)}
+      </div>
     </div>
   `;
 }
