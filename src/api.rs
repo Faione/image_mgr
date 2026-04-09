@@ -8,6 +8,7 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use tokio::{fs::File, io::AsyncWriteExt};
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
@@ -410,14 +411,31 @@ pub async fn admin_upload(
             Some(n) if !n.is_empty() => n,
             _ => continue,
         };
-        let data: Vec<u8> = match field.bytes().await {
-            Ok(b) => b.to_vec(),
+        let (actual_name, path) = match state.storage.prepare_upload_path(&date, &filename).await {
+            Ok(v) => v,
             Err(_) => continue,
         };
 
-        match state.storage.save_uploaded(&date, &filename, &data).await {
-            Ok(actual_name) => saved.push(serde_json::json!({ "date": date, "filename": actual_name })),
-            Err(_) => {}
+        let mut out = match File::create(&path).await {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+
+        let mut field = field;
+        let mut ok = true;
+        while let Ok(Some(chunk)) = field.chunk().await {
+            if out.write_all(&chunk).await.is_err() {
+                ok = false;
+                break;
+            }
+        }
+        if out.flush().await.is_err() {
+            ok = false;
+        }
+        if ok {
+            saved.push(serde_json::json!({ "date": date, "filename": actual_name }));
+        } else {
+            let _ = tokio::fs::remove_file(&path).await;
         }
     }
 

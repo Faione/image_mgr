@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
             tower_http::services::ServeDir::new(frontend_dir),
         )
         .layer(DefaultBodyLimit::disable()) // 关闭 axum 默认 2MB 限制，否则大文件上传会 Failed to fetch
-        .layer(RequestBodyLimitLayer::new(256 * 1024 * 1024)) // 256MB 上限
+        .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024 * 1024)) // 2GB 上限
         .layer(CorsLayer::permissive())
         .with_state(api::AppState { config, storage });
 

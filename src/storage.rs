@@ -107,8 +107,12 @@ impl Storage {
         Ok(())
     }
 
-    /// 保存上传的文件到指定日期目录，若重名则自动加 _1、_2 等后缀
-    pub async fn save_uploaded(&self, date: &str, suggested_name: &str, data: &[u8]) -> anyhow::Result<String> {
+    /// 仅分配一个可写入的安全路径，不执行文件写入
+    pub async fn prepare_upload_path(
+        &self,
+        date: &str,
+        suggested_name: &str,
+    ) -> anyhow::Result<(String, PathBuf)> {
         if suggested_name.contains("..") || suggested_name.contains('/') || suggested_name.contains('\\') {
             anyhow::bail!("非法文件名");
         }
@@ -131,8 +135,7 @@ impl Storage {
         }
 
         let path = self.file_path(date, &filename);
-        fs::write(&path, data).await?;
-        Ok(filename)
+        Ok((filename, path))
     }
 
     /// 确保目录存在并保存构建产物

@@ -151,6 +151,9 @@ async function loadImages(date) {
 
 let allImagesOffset = 0;
 let isLoadingAll = false;
+let isRefreshing = false;
+let pullRefreshBound = false;
+let refreshResetTimer = null;
 
 async function loadAllImages(offset, replace) {
   const list = document.getElementById('imagesList');
@@ -159,6 +162,11 @@ async function loadAllImages(offset, replace) {
 
   if (isLoadingAll) return;
   isLoadingAll = true;
+  if (loadMoreBtn) {
+    loadMoreBtn.disabled = true;
+    loadMoreBtn.classList.add('is-loading');
+    if (!replace) loadMoreBtn.textContent = '加载中';
+  }
   if (replace) list.innerHTML = '<p class="hint">加载中...</p>';
 
   try {
@@ -191,6 +199,11 @@ async function loadAllImages(offset, replace) {
     if (replace) list.innerHTML = '<p class="hint">加载失败</p>';
   } finally {
     isLoadingAll = false;
+    if (loadMoreBtn) {
+      loadMoreBtn.disabled = false;
+      loadMoreBtn.classList.remove('is-loading');
+      loadMoreBtn.textContent = '加载更多';
+    }
   }
 }
 
@@ -322,7 +335,7 @@ function bindDateGroupEditors(root) {
       const group = btn.closest('.date-group');
       const input = group && group.querySelector('.js-date-file');
       if (!input) return;
-      await doAdminUploadToTarget(input.files, btn.dataset.date);
+      await doAdminUploadToTarget(input.files, btn.dataset.date, btn);
       input.value = '';
     };
   });
@@ -337,28 +350,70 @@ function bindDateGroupEditors(root) {
   });
 }
 
-async function doAdminUploadToTarget(files, target) {
+function uploadWithProgress(url, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    const token = getAdminToken();
+    if (token) xhr.setRequestHeader('X-Admin-Token', token);
+    xhr.upload.onprogress = (e) => {
+      if (!onProgress) return;
+      if (e.lengthComputable && e.total > 0) {
+        onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+      }
+    };
+    xhr.onload = () => {
+      let body = {};
+      try {
+        body = JSON.parse(xhr.responseText || '{}');
+      } catch (_) {}
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body });
+    };
+    xhr.onerror = () => reject(new Error('网络错误'));
+    xhr.send(formData);
+  });
+}
+
+async function doAdminUploadToTarget(files, target, triggerBtn) {
   if (!files || !files.length) {
     alert('请先选择文件');
     return;
+  }
+  const originalText = triggerBtn ? triggerBtn.textContent : '';
+  if (triggerBtn) {
+    triggerBtn.disabled = true;
+    triggerBtn.classList.add('is-loading');
+    triggerBtn.textContent = '上传中 0%';
   }
   try {
     const fd = new FormData();
     for (let i = 0; i < files.length; i++) fd.append('file', files[i]);
     const url = `${API}/admin/upload?target=${encodeURIComponent(target)}`;
-    const r = await fetchWithAdmin(url, { method: 'POST', body: fd });
-    const data = await r.json().catch(() => ({}));
-    if (r.ok && data.saved && data.saved.length) {
+    const result = await uploadWithProgress(url, fd, (percent) => {
+      if (triggerBtn) triggerBtn.textContent = `上传中 ${percent}%`;
+    });
+    const data = result.body || {};
+    if (result.ok && data.saved && data.saved.length) {
       const d = document.getElementById('dateSelect')?.value || '';
       await Promise.all([loadStableImages(), loadImages(d)]);
       alert(`已上传 ${data.saved.length} 个文件`);
-    } else if (!r.ok) {
+    } else if (!result.ok) {
+      if (result.status === 413) {
+        alert('上传失败：文件超过服务端大小限制');
+        return;
+      }
       alert(data.error || '上传失败');
     } else {
       alert('未保存任何文件，请检查格式');
     }
   } catch (err) {
     alert('上传请求失败: ' + (err.message || err));
+  } finally {
+    if (triggerBtn) {
+      triggerBtn.disabled = false;
+      triggerBtn.classList.remove('is-loading');
+      triggerBtn.textContent = originalText || '上传';
+    }
   }
 }
 
@@ -374,7 +429,7 @@ function setupStableAdminPanel() {
   if (!toggle || !panel || !drop || !input || !btn) return;
   toggle.onclick = () => panel.classList.toggle('hidden');
   btn.onclick = async () => {
-    await doAdminUploadToTarget(input.files, 'stable');
+    await doAdminUploadToTarget(input.files, 'stable', btn);
     input.value = '';
   };
   bindCompactDropZone(drop, input, files => doAdminUploadToTarget(files, 'stable'));
@@ -399,30 +454,64 @@ function bindDeleteButtons(root) {
   });
 }
 
-function doRefresh() {
+function canTriggerPullRefresh(section) {
+  const sectionTop = section ? section.scrollTop <= 0 : true;
+  const pageTop = window.scrollY <= 0;
+  return sectionTop || pageTop;
+}
+
+async function doRefresh() {
   const hint = document.getElementById('pullHint');
-  hint.textContent = '刷新中...';
-  hint.classList.add('refreshing');
+  if (!hint || isRefreshing) return;
+  if (refreshResetTimer) {
+    clearTimeout(refreshResetTimer);
+    refreshResetTimer = null;
+  }
+  isRefreshing = true;
+  hint.textContent = '刷新中';
+  hint.classList.add('refreshing', 'is-loading');
   const date = document.getElementById('dateSelect').value;
-  Promise.all([loadStableImages(), loadImages(date), loadAnnouncement()]).then(() => {
-    hint.textContent = '下拉刷新';
-    hint.classList.remove('refreshing');
-  });
+  try {
+    await Promise.all([loadStableImages(), loadImages(date), loadAnnouncement()]);
+    hint.textContent = '已更新';
+    hint.classList.remove('is-loading');
+    hint.classList.add('refresh-done');
+    refreshResetTimer = setTimeout(() => {
+      hint.textContent = '下拉刷新';
+      hint.classList.remove('refreshing', 'refresh-done');
+      refreshResetTimer = null;
+    }, 1200);
+  } finally {
+    isRefreshing = false;
+    if (!refreshResetTimer) {
+      hint.textContent = '下拉刷新';
+      hint.classList.remove('refreshing', 'is-loading', 'refresh-done');
+    }
+  }
 }
 
 function setupPullRefresh() {
   const section = document.getElementById('imagesSection');
   const hint = document.getElementById('pullHint');
+  if (!section || !hint || pullRefreshBound) return;
+  pullRefreshBound = true;
   let startY = 0;
+  let pulling = false;
 
   hint.addEventListener('click', () => doRefresh());
 
   section.addEventListener('touchstart', (e) => {
+    if (!canTriggerPullRefresh(section) || isRefreshing) {
+      pulling = false;
+      return;
+    }
+    pulling = true;
     startY = e.touches[0].clientY;
   }, { passive: true });
 
   section.addEventListener('touchmove', (e) => {
-    if (window.scrollY <= 0 && e.touches[0].clientY - startY > 30) {
+    if (!pulling || isRefreshing) return;
+    if (e.touches[0].clientY - startY > 30) {
       hint.textContent = '释放刷新';
     } else {
       hint.textContent = '下拉刷新';
@@ -430,7 +519,9 @@ function setupPullRefresh() {
   }, { passive: true });
 
   section.addEventListener('touchend', (e) => {
-    if (window.scrollY <= 0 && e.changedTouches[0].clientY - startY > 60) {
+    if (!pulling || isRefreshing) return;
+    pulling = false;
+    if (e.changedTouches[0].clientY - startY > 60) {
       doRefresh();
     } else {
       hint.textContent = '下拉刷新';
