@@ -118,3 +118,84 @@ pub fn get_build_log() -> Vec<BuildRecord> {
         .map(|log| log.clone())
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn build_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), nanos))
+    }
+
+    #[tokio::test]
+    async fn run_build_saves_artifacts_when_script_outputs_files() {
+        let _guard = build_test_lock().lock().expect("build test lock poisoned");
+        let root = unique_temp_dir("build_success_test");
+        tokio::fs::create_dir_all(&root)
+            .await
+            .expect("create storage root");
+        let storage = Storage::new(root.clone());
+        let before_len = get_build_log().len();
+
+        let cfg = BuildConfig {
+            name: "unit-success".to_string(),
+            interval_minutes: 1,
+            script: r#"
+mkdir -p output
+echo hello > output/success.txt
+"#
+            .to_string(),
+        };
+
+        let artifacts = run_build(&cfg, &storage)
+            .await
+            .expect("build should succeed");
+        assert!(artifacts.iter().any(|a| a == "success.txt"));
+
+        let after_log = get_build_log();
+        assert!(after_log.len() >= before_len + 1);
+        let last = after_log.last().expect("build log should contain new record");
+        assert_eq!(last.name, "unit-success");
+        assert!(last.status == "success" || last.status == "no_output");
+
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn run_build_returns_error_when_script_fails() {
+        let _guard = build_test_lock().lock().expect("build test lock poisoned");
+        let root = unique_temp_dir("build_fail_test");
+        tokio::fs::create_dir_all(&root)
+            .await
+            .expect("create storage root");
+        let storage = Storage::new(root.clone());
+        let before_len = get_build_log().len();
+
+        let cfg = BuildConfig {
+            name: "unit-fail".to_string(),
+            interval_minutes: 1,
+            script: "echo bad >&2\nexit 1".to_string(),
+        };
+
+        let err = run_build(&cfg, &storage).await.expect_err("build should fail");
+        assert!(err.to_string().contains("构建脚本执行失败"));
+
+        let after_log = get_build_log();
+        assert!(after_log.len() >= before_len + 1);
+        let last = after_log.last().expect("build log should contain failed record");
+        assert_eq!(last.name, "unit-fail");
+        assert!(last.status.starts_with("failed:"));
+
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+}

@@ -66,3 +66,58 @@ echo 'sample content' > output/sample.txt
         .to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn cwd_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), nanos))
+    }
+
+    #[test]
+    fn default_config_is_valid_toml() {
+        let raw = Config::default_config();
+        let parsed: Config = toml::from_str(&raw).expect("default config should parse");
+        assert_eq!(parsed.port, 3000);
+        assert_eq!(parsed.uploads_dir, PathBuf::from("uploads"));
+        assert!(!parsed.builds.is_empty());
+    }
+
+    #[test]
+    fn minimal_config_uses_defaults() {
+        let parsed: Config = toml::from_str("").expect("empty config should parse with defaults");
+        assert_eq!(parsed.port, 3000);
+        assert_eq!(parsed.uploads_dir, PathBuf::from("uploads"));
+        assert!(parsed.builds.is_empty());
+        assert!(parsed.admin_token.is_none());
+    }
+
+    #[test]
+    fn load_creates_default_file_when_missing() {
+        let _guard = cwd_lock().lock().expect("cwd lock poisoned");
+        let temp_dir = unique_temp_dir("config_load_test");
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let old_cwd = std::env::current_dir().expect("read cwd");
+        std::env::set_current_dir(&temp_dir).expect("set temp cwd");
+
+        let loaded = Config::load().expect("config should load");
+        let created = temp_dir.join("config.toml");
+        assert!(created.exists(), "config.toml should be created automatically");
+        assert_eq!(loaded.port, 3000);
+        assert_eq!(loaded.uploads_dir, PathBuf::from("uploads"));
+
+        std::env::set_current_dir(old_cwd).expect("restore cwd");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+}

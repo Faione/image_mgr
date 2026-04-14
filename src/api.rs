@@ -489,3 +489,71 @@ pub async fn admin_set_release_notes(
             .into_response(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    fn unique_temp_dir(prefix: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), nanos))
+    }
+
+    async fn make_state(admin_token: Option<&str>) -> AppState {
+        let root = unique_temp_dir("api_test_storage");
+        tokio::fs::create_dir_all(&root)
+            .await
+            .expect("create api test storage");
+        AppState {
+            config: Arc::new(Config {
+                port: 3000,
+                uploads_dir: root.clone(),
+                builds: Vec::new(),
+                admin_token: admin_token.map(|s| s.to_string()),
+            }),
+            storage: Arc::new(Storage::new(root)),
+        }
+    }
+
+    #[tokio::test]
+    async fn admin_status_reflects_token_presence() {
+        let state_without = make_state(None).await;
+        let resp_without = admin_status(State(state_without)).await.into_response();
+        assert_eq!(resp_without.status(), StatusCode::OK);
+
+        let state_with = make_state(Some("secret")).await;
+        let resp_with = admin_status(State(state_with)).await.into_response();
+        assert_eq!(resp_with.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn get_release_notes_requires_date_query() {
+        let state = make_state(None).await;
+        let resp = get_release_notes(State(state), Query(ReleaseNotesQuery { date: None }))
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn admin_verify_rejects_wrong_token() {
+        let state = make_state(Some("secret")).await;
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("X-Admin-Token", HeaderValue::from_static("wrong"));
+        let resp = admin_verify(State(state), headers).await.into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn admin_verify_accepts_correct_token() {
+        let state = make_state(Some("secret")).await;
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("X-Admin-Token", HeaderValue::from_static("secret"));
+        let resp = admin_verify(State(state), headers).await.into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+}

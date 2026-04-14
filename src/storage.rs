@@ -217,3 +217,132 @@ impl Storage {
             && name != "stable"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{}_{}_{}", prefix, std::process::id(), nanos))
+    }
+
+    #[tokio::test]
+    async fn list_dates_only_returns_valid_yyyy_mm_dd_dirs() {
+        let root = unique_temp_dir("storage_dates_test");
+        fs::create_dir_all(root.join("2026-04-14"))
+            .await
+            .expect("create valid dir");
+        fs::create_dir_all(root.join("2026-03-01"))
+            .await
+            .expect("create valid dir");
+        fs::create_dir_all(root.join("stable"))
+            .await
+            .expect("create stable dir");
+        fs::create_dir_all(root.join("not-a-date"))
+            .await
+            .expect("create invalid dir");
+
+        let storage = Storage::new(root.clone());
+        let dates = storage.list_dates().await.expect("list dates");
+        assert_eq!(dates, vec!["2026-04-14".to_string(), "2026-03-01".to_string()]);
+
+        let _ = fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn list_images_ignores_release_notes_file() {
+        let root = unique_temp_dir("storage_list_images_test");
+        let day_dir = root.join("2026-04-14");
+        fs::create_dir_all(&day_dir).await.expect("create day dir");
+        fs::write(day_dir.join("a.img"), b"abc")
+            .await
+            .expect("write image");
+        fs::write(day_dir.join(RELEASE_NOTES_FILENAME), b"notes")
+            .await
+            .expect("write release notes");
+
+        let storage = Storage::new(root.clone());
+        let images = storage.list_images("2026-04-14").await.expect("list images");
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].filename, "a.img");
+
+        let _ = fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn prepare_upload_path_renames_duplicate_files() {
+        let root = unique_temp_dir("storage_prepare_upload_test");
+        let day_dir = root.join("2026-04-14");
+        fs::create_dir_all(&day_dir).await.expect("create day dir");
+        fs::write(day_dir.join("image.iso"), b"old")
+            .await
+            .expect("write existing file");
+
+        let storage = Storage::new(root.clone());
+        let (name, path) = storage
+            .prepare_upload_path("2026-04-14", "image.iso")
+            .await
+            .expect("prepare upload path");
+        assert_eq!(name, "image_1.iso");
+        assert!(path.ends_with("image_1.iso"));
+
+        let err = storage
+            .prepare_upload_path("2026-04-14", "../bad.iso")
+            .await
+            .expect_err("invalid filename should fail");
+        assert!(err.to_string().contains("非法文件名"));
+
+        let _ = fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn release_notes_roundtrip_and_clear() {
+        let root = unique_temp_dir("storage_notes_test");
+        let storage = Storage::new(root.clone());
+
+        storage
+            .set_release_notes("2026-04-14", "first release")
+            .await
+            .expect("set notes");
+        let got = storage
+            .get_release_notes("2026-04-14")
+            .await
+            .expect("get notes");
+        assert_eq!(got.as_deref(), Some("first release"));
+
+        storage
+            .set_release_notes("2026-04-14", "   ")
+            .await
+            .expect("clear notes");
+        let got2 = storage
+            .get_release_notes("2026-04-14")
+            .await
+            .expect("get cleared notes");
+        assert!(got2.is_none());
+
+        let invalid = storage
+            .set_release_notes("stable", "bad")
+            .await
+            .expect_err("stable should be rejected");
+        assert!(invalid.to_string().contains("YYYY-MM-DD"));
+
+        let _ = fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn announcement_roundtrip() {
+        let root = unique_temp_dir("storage_announcement_test");
+        let storage = Storage::new(root.clone());
+        storage
+            .set_announcement("hello world")
+            .await
+            .expect("set announcement");
+        let got = storage.get_announcement().await;
+        assert_eq!(got, "hello world");
+        let _ = fs::remove_dir_all(root).await;
+    }
+}
