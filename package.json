@@ -1,0 +1,25 @@
+{
+  "name": "snapshot_view",
+  "version": "1.0.0",
+  "description": "一个轻量的镜像分发服务：支持每日构建镜像展示、下载、管理员按条目维护（上传/删除/发布说明），以及脚本驱动的定时构建。",
+  "main": "index.js",
+  "scripts": {
+    "format": "prettier --write frontend/index.html frontend/style.css frontend/app.js README.md",
+    "format:check": "prettier --check frontend/index.html frontend/style.css frontend/app.js README.md"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Faione/image_mgr.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Faione/image_mgr/issues"
+  },
+  "homepage": "https://github.com/Faione/image_mgr#readme",
+  "devDependencies": {
+    "prettier": "^3.8.2"
+  }
+}
