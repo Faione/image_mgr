@@ -76,7 +76,7 @@ async function loadStableImages() {
     if (!images.length) {
       list.innerHTML = '<p class="hint">暂无固定发布</p>';
     } else {
-      list.innerHTML = images.map(img => renderImageItem(img, 'stable')).join('');
+      list.innerHTML = images.map((img) => renderImageItem(img, 'stable')).join('');
       bindDeleteButtons(list);
     }
   } catch (e) {
@@ -90,7 +90,10 @@ async function loadDates() {
   try {
     const dates = await fetchJSON(`${API}/dates`);
     select.innerHTML = dates.length
-      ? ['<option value="">全部镜像（按日期）</option>', ...dates.map(d => `<option value="${d}">${d}</option>`)].join('')
+      ? [
+          '<option value="">全部镜像（按日期）</option>',
+          ...dates.map((d) => `<option value="${d}">${d}</option>`),
+        ].join('')
       : '<option value="">暂无数据</option>';
   } catch (e) {
     select.innerHTML = '<option value="">加载失败</option>';
@@ -132,7 +135,9 @@ async function loadImages(date) {
     try {
       const [images, notesRes] = await Promise.all([
         fetchJSON(`${API}/images?date=${date}`),
-        fetch(`${API}/release-notes?date=${encodeURIComponent(date)}`).then(r => (r.ok ? r.json() : { content: '' })),
+        fetch(`${API}/release-notes?date=${encodeURIComponent(date)}`).then((r) =>
+          r.ok ? r.json() : { content: '' }
+        ),
       ]);
       const notesTrimmed = (notesRes.content || '').trim();
       list.innerHTML = renderSingleDateBlock(date, images, notesTrimmed);
@@ -178,13 +183,13 @@ async function loadAllImages(offset, replace) {
       if (!items.length) {
         list.innerHTML = '<p class="hint">暂无镜像</p>';
       } else {
-        list.innerHTML = items.map(g => renderDateGroupBlock(g)).join('');
+        list.innerHTML = items.map((g) => renderDateGroupBlock(g)).join('');
         bindDeleteButtons(list);
         bindDateGroupEditors(list);
       }
     } else {
       allImagesOffset += items.length;
-      const frag = items.map(g => renderDateGroupBlock(g)).join('');
+      const frag = items.map((g) => renderDateGroupBlock(g)).join('');
       if (list.querySelector('.date-group')) {
         list.insertAdjacentHTML('beforeend', frag);
       } else {
@@ -256,41 +261,43 @@ function renderDateGroupBlock(g) {
       : `<div class="date-group-title">${escapeHtml(date)}</div>`;
   const adminPanel = IS_ADMIN_VIEW && IS_ADMIN_AUTH ? renderDateEditPanel(date, notes) : '';
   const body = images.length
-    ? images.map(img => renderImageItem(img, date)).join('')
+    ? images.map((img) => renderImageItem(img, date)).join('')
     : '<p class="hint">该日期暂无镜像</p>';
   return `<div class="date-group" data-date="${escapeHtml(date)}">${adminHeader}${notesHtml}${adminPanel}${body}</div>`;
 }
 
 function renderSingleDateBlock(date, images, notesTrimmed) {
-  const notesHtml = notesTrimmed ? `<div class="group-release-notes">${escapeHtml(notesTrimmed)}</div>` : '';
+  const notesHtml = notesTrimmed
+    ? `<div class="group-release-notes">${escapeHtml(notesTrimmed)}</div>`
+    : '';
   const adminHeader =
     IS_ADMIN_VIEW && IS_ADMIN_AUTH
       ? `<div class="date-group-header"><div class="date-group-title">${escapeHtml(date)}</div><button type="button" class="btn-edit-entry js-toggle-date-edit" data-date="${escapeHtml(date)}">管理</button></div>`
       : `<div class="date-group-title">${escapeHtml(date)}</div>`;
   const adminPanel = IS_ADMIN_VIEW && IS_ADMIN_AUTH ? renderDateEditPanel(date, notesTrimmed) : '';
   const body = images.length
-    ? images.map(img => renderImageItem(img, date)).join('')
+    ? images.map((img) => renderImageItem(img, date)).join('')
     : '<p class="hint">该日期暂无镜像</p>';
   return `<div class="date-group" data-date="${escapeHtml(date)}">${adminHeader}${notesHtml}${adminPanel}${body}</div>`;
 }
 
 function bindCompactDropZone(dropEl, fileInput, onFiles) {
   if (!dropEl || !fileInput) return;
-  ['dragenter', 'dragover'].forEach(ev => {
-    dropEl.addEventListener(ev, e => {
+  ['dragenter', 'dragover'].forEach((ev) => {
+    dropEl.addEventListener(ev, (e) => {
       e.preventDefault();
       e.stopPropagation();
       dropEl.classList.add('drag-over');
     });
   });
-  ['dragleave', 'drop'].forEach(ev => {
-    dropEl.addEventListener(ev, e => {
+  ['dragleave', 'drop'].forEach((ev) => {
+    dropEl.addEventListener(ev, (e) => {
       e.preventDefault();
       e.stopPropagation();
       dropEl.classList.remove('drag-over');
     });
   });
-  dropEl.addEventListener('drop', e => {
+  dropEl.addEventListener('drop', (e) => {
     const files = e.dataTransfer && e.dataTransfer.files;
     if (files && files.length) onFiles(files);
   });
@@ -299,14 +306,14 @@ function bindCompactDropZone(dropEl, fileInput, onFiles) {
 
 function bindDateGroupEditors(root) {
   if (!root || !IS_ADMIN_VIEW || !IS_ADMIN_AUTH) return;
-  root.querySelectorAll('.js-toggle-date-edit').forEach(btn => {
+  root.querySelectorAll('.js-toggle-date-edit').forEach((btn) => {
     btn.onclick = () => {
       const group = btn.closest('.date-group');
       const panel = group && group.querySelector('.js-date-edit-panel');
       if (panel) panel.classList.toggle('hidden');
     };
   });
-  root.querySelectorAll('.js-save-release-notes').forEach(btn => {
+  root.querySelectorAll('.js-save-release-notes').forEach((btn) => {
     btn.onclick = async () => {
       const date = btn.dataset.date;
       const group = btn.closest('.date-group');
@@ -330,7 +337,7 @@ function bindDateGroupEditors(root) {
       }
     };
   });
-  root.querySelectorAll('.js-date-upload-btn').forEach(btn => {
+  root.querySelectorAll('.js-date-upload-btn').forEach((btn) => {
     btn.onclick = async () => {
       const group = btn.closest('.date-group');
       const input = group && group.querySelector('.js-date-file');
@@ -339,14 +346,14 @@ function bindDateGroupEditors(root) {
       input.value = '';
     };
   });
-  root.querySelectorAll('.js-date-drop').forEach(drop => {
+  root.querySelectorAll('.js-date-drop').forEach((drop) => {
     if (drop.dataset.dropBound === '1') return;
     drop.dataset.dropBound = '1';
     const group = drop.closest('.date-group');
     const input = group && group.querySelector('.js-date-file');
     const date = drop.dataset.date;
     if (!input || !date) return;
-    bindCompactDropZone(drop, input, files => doAdminUploadToTarget(files, date));
+    bindCompactDropZone(drop, input, (files) => doAdminUploadToTarget(files, date));
   });
 }
 
@@ -367,7 +374,11 @@ function uploadWithProgress(url, formData, onProgress) {
       try {
         body = JSON.parse(xhr.responseText || '{}');
       } catch (_) {}
-      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body });
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        body,
+      });
     };
     xhr.onerror = () => reject(new Error('网络错误'));
     xhr.send(formData);
@@ -432,17 +443,19 @@ function setupStableAdminPanel() {
     await doAdminUploadToTarget(input.files, 'stable', btn);
     input.value = '';
   };
-  bindCompactDropZone(drop, input, files => doAdminUploadToTarget(files, 'stable'));
+  bindCompactDropZone(drop, input, (files) => doAdminUploadToTarget(files, 'stable'));
 }
 
 function bindDeleteButtons(root) {
   if (!root) return;
-  root.querySelectorAll('.btn-delete').forEach(btn => {
+  root.querySelectorAll('.btn-delete').forEach((btn) => {
     btn.onclick = async () => {
       if (!confirm('确定删除该镜像？')) return;
       const date = btn.dataset.date;
       const filename = btn.dataset.filename;
-      const r = await fetchWithAdmin(`${API}/admin/image/${date}/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      const r = await fetchWithAdmin(`${API}/admin/image/${date}/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+      });
       if (r.ok) {
         const currentDate = document.getElementById('dateSelect')?.value || '';
         await Promise.all([loadStableImages(), loadImages(currentDate)]);
@@ -500,33 +513,45 @@ function setupPullRefresh() {
 
   hint.addEventListener('click', () => doRefresh());
 
-  section.addEventListener('touchstart', (e) => {
-    if (!canTriggerPullRefresh(section) || isRefreshing) {
+  section.addEventListener(
+    'touchstart',
+    (e) => {
+      if (!canTriggerPullRefresh(section) || isRefreshing) {
+        pulling = false;
+        return;
+      }
+      pulling = true;
+      startY = e.touches[0].clientY;
+    },
+    { passive: true }
+  );
+
+  section.addEventListener(
+    'touchmove',
+    (e) => {
+      if (!pulling || isRefreshing) return;
+      if (e.touches[0].clientY - startY > 30) {
+        hint.textContent = '释放刷新';
+      } else {
+        hint.textContent = '下拉刷新';
+      }
+    },
+    { passive: true }
+  );
+
+  section.addEventListener(
+    'touchend',
+    (e) => {
+      if (!pulling || isRefreshing) return;
       pulling = false;
-      return;
-    }
-    pulling = true;
-    startY = e.touches[0].clientY;
-  }, { passive: true });
-
-  section.addEventListener('touchmove', (e) => {
-    if (!pulling || isRefreshing) return;
-    if (e.touches[0].clientY - startY > 30) {
-      hint.textContent = '释放刷新';
-    } else {
-      hint.textContent = '下拉刷新';
-    }
-  }, { passive: true });
-
-  section.addEventListener('touchend', (e) => {
-    if (!pulling || isRefreshing) return;
-    pulling = false;
-    if (e.changedTouches[0].clientY - startY > 60) {
-      doRefresh();
-    } else {
-      hint.textContent = '下拉刷新';
-    }
-  }, { passive: true });
+      if (e.changedTouches[0].clientY - startY > 60) {
+        doRefresh();
+      } else {
+        hint.textContent = '下拉刷新';
+      }
+    },
+    { passive: true }
+  );
 }
 
 function initImagesPage() {
@@ -560,14 +585,19 @@ async function loadBuildLog() {
       el.innerHTML = '<p class="hint">暂无构建记录</p>';
       return;
     }
-    el.innerHTML = log.reverse().map(r => `
+    el.innerHTML = log
+      .reverse()
+      .map(
+        (r) => `
       <div class="build-record">
         <strong>${escapeHtml(r.name)}</strong> · 
         <span class="status ${r.status.includes('fail') ? 'failed' : 'success'}">${escapeHtml(r.status)}</span> ·
         ${r.time}
         ${r.artifacts?.length ? `<br>产物: ${r.artifacts.join(', ')}` : ''}
       </div>
-    `).join('');
+    `
+      )
+      .join('');
   } catch (e) {
     el.innerHTML = '<p class="hint">加载失败</p>';
   }
@@ -639,7 +669,7 @@ async function initAdminPage() {
 
   const saved = getAdminToken();
   if (saved) {
-    const ok = await fetchWithAdmin(`${API}/admin/verify`).then(r => r.ok);
+    const ok = await fetchWithAdmin(`${API}/admin/verify`).then((r) => r.ok);
     if (ok) {
       loginEl.classList.add('hidden');
       panelEl.classList.remove('hidden');
@@ -670,7 +700,9 @@ async function initAdminPage() {
   tokenBtn.onclick = async () => {
     const token = tokenInput.value.trim();
     if (!token) return;
-    const r = await fetch(`${API}/admin/verify`, { headers: { 'X-Admin-Token': token } });
+    const r = await fetch(`${API}/admin/verify`, {
+      headers: { 'X-Admin-Token': token },
+    });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
       alert(err.error || '令牌无效');
@@ -742,8 +774,11 @@ function route() {
   const buildBlock = document.getElementById('buildAdminBlock');
   IS_ADMIN_VIEW = path === '/admin';
   loadAnnouncement();
-  document.querySelectorAll('.nav-link').forEach(a => {
-    a.classList.toggle('active', (path === '/' && a.href.endsWith('/')) || (path === '/admin' && a.href.endsWith('/admin')));
+  document.querySelectorAll('.nav-link').forEach((a) => {
+    a.classList.toggle(
+      'active',
+      (path === '/' && a.href.endsWith('/')) || (path === '/admin' && a.href.endsWith('/admin'))
+    );
   });
   app.classList.remove('hidden');
   if (IS_ADMIN_VIEW) {

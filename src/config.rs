@@ -113,7 +113,10 @@ mod tests {
 
         let loaded = Config::load().expect("config should load");
         let created = temp_dir.join("config.toml");
-        assert!(created.exists(), "config.toml should be created automatically");
+        assert!(
+            created.exists(),
+            "config.toml should be created automatically"
+        );
         assert_eq!(loaded.port, 3000);
         assert_eq!(loaded.uploads_dir, PathBuf::from("uploads"));
 

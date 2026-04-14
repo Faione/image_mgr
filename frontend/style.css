@@ -12,7 +12,7 @@
   --content-band: #fafbfc;
 }
 
-[data-theme="dark"] {
+[data-theme='dark'] {
   --bg: #0d1117;
   --surface: #161b22;
   --border: #30363d;
@@ -30,7 +30,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   margin: 0;
@@ -117,7 +117,8 @@ nav {
   text-decoration: none;
 }
 
-.nav-link:hover, .nav-link.active {
+.nav-link:hover,
+.nav-link.active {
   color: var(--accent);
 }
 
@@ -364,7 +365,7 @@ h2 {
   gap: 0.5rem;
   cursor: pointer;
 }
-.form-row-inline input[type="checkbox"] {
+.form-row-inline input[type='checkbox'] {
   width: auto;
 }
 
@@ -503,7 +504,7 @@ h2 {
 }
 
 .pull-hint.is-loading::before {
-  content: "";
+  content: '';
   width: 0.75rem;
   height: 0.75rem;
   border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
@@ -645,7 +646,7 @@ h2 {
 }
 
 .load-more-btn.is-loading::before {
-  content: "";
+  content: '';
   width: 0.8rem;
   height: 0.8rem;
   border: 2px solid color-mix(in srgb, var(--text) 30%, transparent);
@@ -664,7 +665,8 @@ h2 {
   font-size: 0.9rem;
 }
 
-.form-row input, .form-row textarea {
+.form-row input,
+.form-row textarea {
   width: 100%;
   padding: 0.5rem 0.75rem;
   background: var(--surface);
@@ -701,7 +703,7 @@ button.is-loading {
 }
 
 button.is-loading::before {
-  content: "";
+  content: '';
   width: 0.75rem;
   height: 0.75rem;
   border: 2px solid color-mix(in srgb, var(--bg) 30%, transparent);
@@ -730,8 +732,12 @@ button.is-loading::before {
   border-bottom: none;
 }
 
-.build-record .status.success { color: var(--success); }
-.build-record .status.failed { color: #f85149; }
+.build-record .status.success {
+  color: var(--success);
+}
+.build-record .status.failed {
+  color: #f85149;
+}
 
 .theme-toggle {
   background: var(--surface);
@@ -746,11 +752,31 @@ button.is-loading::before {
   border-color: var(--accent);
 }
 
-.admin-login .form-row { max-width: 320px; }
-.admin-section h3 { font-size: 0.95rem; margin: 1.5rem 0 0.5rem; color: var(--muted); }
-.admin-section h4.admin-h4 { font-size: 0.9rem; margin: 1rem 0 0.5rem; color: var(--muted); font-weight: 500; }
-.text-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; font-size: inherit; }
-.text-btn:hover { color: var(--accent); }
+.admin-login .form-row {
+  max-width: 320px;
+}
+.admin-section h3 {
+  font-size: 0.95rem;
+  margin: 1.5rem 0 0.5rem;
+  color: var(--muted);
+}
+.admin-section h4.admin-h4 {
+  font-size: 0.9rem;
+  margin: 1rem 0 0.5rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+.text-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+}
+.text-btn:hover {
+  color: var(--accent);
+}
 .image-item .btn-delete {
   margin-left: 0;
   font-weight: 600;
@@ -770,7 +796,9 @@ button.is-loading::before {
   outline: 2px solid #fca5a5;
   outline-offset: 2px;
 }
-input[type="file"] { color: var(--text); }
+input[type='file'] {
+  color: var(--text);
+}
 
 .drop-zone {
   border: 2px dashed var(--border);
@@ -778,7 +806,9 @@ input[type="file"] { color: var(--text); }
   padding: 2rem;
   text-align: center;
   margin-bottom: 1rem;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 .drop-zone .drop-zone-text {
   color: var(--muted);

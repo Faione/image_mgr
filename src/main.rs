@@ -78,14 +78,17 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/builds", get(api::list_builds).post(api::create_build))
         .route("/api/admin/status", get(api::admin_status))
         .route("/api/admin/verify", get(api::admin_verify))
-        .route("/api/admin/image/:date/:filename", delete(api::admin_delete_image))
+        .route(
+            "/api/admin/image/:date/:filename",
+            delete(api::admin_delete_image),
+        )
         .route("/api/admin/upload", post(api::admin_upload))
         .route("/api/admin/announcement", post(api::admin_set_announcement))
-        .route("/api/admin/release-notes", post(api::admin_set_release_notes))
-        .nest_service(
-            "/static",
-            tower_http::services::ServeDir::new(frontend_dir),
+        .route(
+            "/api/admin/release-notes",
+            post(api::admin_set_release_notes),
         )
+        .nest_service("/static", tower_http::services::ServeDir::new(frontend_dir))
         .layer(DefaultBodyLimit::disable()) // 关闭 axum 默认 2MB 限制，否则大文件上传会 Failed to fetch
         .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024 * 1024)) // 2GB 上限
         .layer(CorsLayer::permissive())

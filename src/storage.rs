@@ -29,9 +29,7 @@ impl Storage {
             let path = entry.path();
             if path.is_dir() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.chars().all(|c| c.is_ascii_digit() || c == '-')
-                        && name.len() == 10
-                    {
+                    if name.chars().all(|c| c.is_ascii_digit() || c == '-') && name.len() == 10 {
                         dates.push(name.to_string());
                     }
                 }
@@ -70,10 +68,7 @@ impl Storage {
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if path.is_file() {
-                let name = path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 if name == RELEASE_NOTES_FILENAME {
                     continue;
                 }
@@ -113,7 +108,10 @@ impl Storage {
         date: &str,
         suggested_name: &str,
     ) -> anyhow::Result<(String, PathBuf)> {
-        if suggested_name.contains("..") || suggested_name.contains('/') || suggested_name.contains('\\') {
+        if suggested_name.contains("..")
+            || suggested_name.contains('/')
+            || suggested_name.contains('\\')
+        {
             anyhow::bail!("非法文件名");
         }
         if suggested_name == RELEASE_NOTES_FILENAME {
@@ -123,7 +121,10 @@ impl Storage {
         fs::create_dir_all(&dir).await?;
 
         let (stem, ext) = match suggested_name.rfind('.') {
-            Some(i) => (suggested_name[..i].to_string(), suggested_name[i..].to_string()),
+            Some(i) => (
+                suggested_name[..i].to_string(),
+                suggested_name[i..].to_string(),
+            ),
             None => (suggested_name.to_string(), String::new()),
         };
 
@@ -212,9 +213,7 @@ impl Storage {
     }
 
     fn is_valid_date_dir(name: &str) -> bool {
-        name.len() == 10
-            && name.chars().all(|c| c.is_ascii_digit() || c == '-')
-            && name != "stable"
+        name.len() == 10 && name.chars().all(|c| c.is_ascii_digit() || c == '-') && name != "stable"
     }
 }
 
@@ -248,7 +247,10 @@ mod tests {
 
         let storage = Storage::new(root.clone());
         let dates = storage.list_dates().await.expect("list dates");
-        assert_eq!(dates, vec!["2026-04-14".to_string(), "2026-03-01".to_string()]);
+        assert_eq!(
+            dates,
+            vec!["2026-04-14".to_string(), "2026-03-01".to_string()]
+        );
 
         let _ = fs::remove_dir_all(root).await;
     }
@@ -266,7 +268,10 @@ mod tests {
             .expect("write release notes");
 
         let storage = Storage::new(root.clone());
-        let images = storage.list_images("2026-04-14").await.expect("list images");
+        let images = storage
+            .list_images("2026-04-14")
+            .await
+            .expect("list images");
         assert_eq!(images.len(), 1);
         assert_eq!(images[0].filename, "a.img");
 

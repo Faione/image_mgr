@@ -1,124 +1,151 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>系统镜像分发</title>
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-  <header class="site-header">
-    <h1>系统镜像分发</h1>
-    <nav>
-      <a href="/" class="nav-link active">镜像列表</a>
-      <a href="/admin" class="nav-link">管理</a>
-      <button type="button" id="themeToggle" class="theme-toggle" title="切换主题">浅色</button>
-    </nav>
-  </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>系统镜像分发</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>系统镜像分发</h1>
+      <nav>
+        <a href="/" class="nav-link active">镜像列表</a>
+        <a href="/admin" class="nav-link">管理</a>
+        <button type="button" id="themeToggle" class="theme-toggle" title="切换主题">浅色</button>
+      </nav>
+    </header>
 
-  <div id="announcementBar" class="announcement-bar hidden" role="status" aria-live="polite"></div>
+    <div
+      id="announcementBar"
+      class="announcement-bar hidden"
+      role="status"
+      aria-live="polite"
+    ></div>
 
-  <main id="app" class="app-with-sidebar">
-    <aside class="left-sidebar">
-      <div class="sidebar-card">
-        <section class="stable-section">
-          <div class="stable-section-head">
-            <h2>固定发布</h2>
-            <button type="button" id="stableEditToggle" class="btn-edit-entry hidden">管理</button>
-          </div>
-          <p class="hint">非每日构建的稳定产物，由管理员维护</p>
-          <div id="stableEditPanel" class="date-group-edit-panel hidden">
-            <label class="edit-label">上传到此栏</label>
-            <div id="stableMiniDrop" class="drop-zone drop-zone-compact">
-              <span class="drop-zone-text">拖放文件或点击选择</span>
+    <main id="app" class="app-with-sidebar">
+      <aside class="left-sidebar">
+        <div class="sidebar-card">
+          <section class="stable-section">
+            <div class="stable-section-head">
+              <h2>固定发布</h2>
+              <button type="button" id="stableEditToggle" class="btn-edit-entry hidden">
+                管理
+              </button>
             </div>
-            <div class="edit-row">
-              <input type="file" id="stableFileInput" multiple>
-              <button type="button" id="stableUploadBtn">上传</button>
+            <p class="hint">非每日构建的稳定产物，由管理员维护</p>
+            <div id="stableEditPanel" class="date-group-edit-panel hidden">
+              <label class="edit-label">上传到此栏</label>
+              <div id="stableMiniDrop" class="drop-zone drop-zone-compact">
+                <span class="drop-zone-text">拖放文件或点击选择</span>
+              </div>
+              <div class="edit-row">
+                <input type="file" id="stableFileInput" multiple />
+                <button type="button" id="stableUploadBtn">上传</button>
+              </div>
             </div>
-          </div>
-          <div id="stableImagesList" class="images-list images-list--inset">
-            <p class="hint">加载中...</p>
+            <div id="stableImagesList" class="images-list images-list--inset">
+              <p class="hint">加载中...</p>
+            </div>
+          </section>
+        </div>
+      </aside>
+      <div class="main-content">
+        <section id="adminInlineSection" class="admin-inline content-panel page-block hidden">
+          <header class="panel-title-row">
+            <h2>管理模式</h2>
+          </header>
+          <div class="panel-body">
+            <div id="adminLogin" class="admin-login">
+              <p class="hint">
+                输入管理员令牌后，可在当前页面管理置顶公告；固定发布与每日镜像请在侧栏或列表对应条目中点击「管理」。
+              </p>
+              <div class="form-row">
+                <label>管理员令牌</label>
+                <input type="password" id="adminTokenInput" placeholder="admin_token" />
+              </div>
+              <button type="button" id="adminTokenBtn">验证并进入</button>
+            </div>
+            <div id="adminPanel" class="hidden">
+              <p class="hint">
+                已登录 ·
+                <button type="button" id="adminLogout" class="text-btn">退出</button>
+              </p>
+              <h3>置顶公告</h3>
+              <div class="form-row">
+                <textarea id="adminAnnouncement" rows="3" placeholder="网站顶部公告"></textarea>
+              </div>
+              <button type="button" id="adminAnnouncementSave">保存公告</button>
+              <p class="hint admin-hint-after">
+                每日产物与发布说明请在下方对应日期条目中点击「管理」进行上传、删除与编辑。
+              </p>
+            </div>
           </div>
         </section>
+        <section class="dates-section content-panel page-block" aria-labelledby="dates-heading">
+          <header class="panel-title-row">
+            <h2 id="dates-heading">按日期查看</h2>
+          </header>
+          <div class="panel-body panel-body--compact">
+            <div class="date-picker">
+              <label for="dateSelect">选择日期</label>
+              <select id="dateSelect" aria-labelledby="dates-heading">
+                <option value="">加载中...</option>
+              </select>
+            </div>
+          </div>
+        </section>
+        <section
+          class="images-section content-panel page-block"
+          id="imagesSection"
+          aria-labelledby="imagesTitle"
+        >
+          <header class="panel-head-strip">
+            <p id="pullHint" class="pull-hint" title="点击刷新">下拉刷新</p>
+            <h2 id="imagesTitle">镜像文件</h2>
+          </header>
+          <div
+            id="releaseNotesBlock"
+            class="release-notes-block release-notes-block--in-panel hidden"
+          ></div>
+          <div id="imagesList" class="images-list images-list--panel">
+            <p class="hint">加载中...</p>
+          </div>
+          <footer class="panel-footer">
+            <div id="loadMoreWrap" class="load-more-wrap hidden">
+              <button id="loadMoreBtn" class="load-more-btn">加载更多</button>
+            </div>
+            <div id="buildAdminBlock" class="build-admin-block hidden">
+              <h3>构建管理</h3>
+              <p class="hint build-hint">
+                在 config.toml 中配置定时构建任务，构建脚本需将产物放入 output 目录
+              </p>
+              <form id="buildForm">
+                <div class="form-row">
+                  <label>名称</label>
+                  <input type="text" name="name" placeholder="build-name" required />
+                </div>
+                <div class="form-row">
+                  <label>间隔(分钟)</label>
+                  <input type="number" name="interval" value="60" min="1" />
+                </div>
+                <div class="form-row">
+                  <label>构建脚本</label>
+                  <textarea
+                    name="script"
+                    rows="8"
+                    placeholder="#!/bin/bash&#10;mkdir -p output&#10;echo 'sample' > output/sample.txt"
+                  ></textarea>
+                </div>
+                <button type="submit">立即构建</button>
+              </form>
+              <div id="buildLog" class="build-log"></div>
+            </div>
+          </footer>
+        </section>
       </div>
-    </aside>
-    <div class="main-content">
-      <section id="adminInlineSection" class="admin-inline content-panel page-block hidden">
-        <header class="panel-title-row">
-          <h2>管理模式</h2>
-        </header>
-        <div class="panel-body">
-          <div id="adminLogin" class="admin-login">
-            <p class="hint">输入管理员令牌后，可在当前页面管理置顶公告；固定发布与每日镜像请在侧栏或列表对应条目中点击「管理」。</p>
-            <div class="form-row">
-              <label>管理员令牌</label>
-              <input type="password" id="adminTokenInput" placeholder="admin_token">
-            </div>
-            <button type="button" id="adminTokenBtn">验证并进入</button>
-          </div>
-          <div id="adminPanel" class="hidden">
-            <p class="hint">已登录 · <button type="button" id="adminLogout" class="text-btn">退出</button></p>
-            <h3>置顶公告</h3>
-            <div class="form-row">
-              <textarea id="adminAnnouncement" rows="3" placeholder="网站顶部公告"></textarea>
-            </div>
-            <button type="button" id="adminAnnouncementSave">保存公告</button>
-            <p class="hint admin-hint-after">每日产物与发布说明请在下方对应日期条目中点击「管理」进行上传、删除与编辑。</p>
-          </div>
-        </div>
-      </section>
-      <section class="dates-section content-panel page-block" aria-labelledby="dates-heading">
-        <header class="panel-title-row">
-          <h2 id="dates-heading">按日期查看</h2>
-        </header>
-        <div class="panel-body panel-body--compact">
-          <div class="date-picker">
-            <label for="dateSelect">选择日期</label>
-            <select id="dateSelect" aria-labelledby="dates-heading">
-              <option value="">加载中...</option>
-            </select>
-          </div>
-        </div>
-      </section>
-      <section class="images-section content-panel page-block" id="imagesSection" aria-labelledby="imagesTitle">
-        <header class="panel-head-strip">
-          <p id="pullHint" class="pull-hint" title="点击刷新">下拉刷新</p>
-          <h2 id="imagesTitle">镜像文件</h2>
-        </header>
-        <div id="releaseNotesBlock" class="release-notes-block release-notes-block--in-panel hidden"></div>
-        <div id="imagesList" class="images-list images-list--panel">
-          <p class="hint">加载中...</p>
-        </div>
-        <footer class="panel-footer">
-          <div id="loadMoreWrap" class="load-more-wrap hidden">
-            <button id="loadMoreBtn" class="load-more-btn">加载更多</button>
-          </div>
-          <div id="buildAdminBlock" class="build-admin-block hidden">
-            <h3>构建管理</h3>
-            <p class="hint build-hint">在 config.toml 中配置定时构建任务，构建脚本需将产物放入 output 目录</p>
-            <form id="buildForm">
-              <div class="form-row">
-                <label>名称</label>
-                <input type="text" name="name" placeholder="build-name" required>
-              </div>
-              <div class="form-row">
-                <label>间隔(分钟)</label>
-                <input type="number" name="interval" value="60" min="1">
-              </div>
-              <div class="form-row">
-                <label>构建脚本</label>
-                <textarea name="script" rows="8" placeholder="#!/bin/bash&#10;mkdir -p output&#10;echo 'sample' > output/sample.txt"></textarea>
-              </div>
-              <button type="submit">立即构建</button>
-            </form>
-            <div id="buildLog" class="build-log"></div>
-          </div>
-        </footer>
-      </section>
-    </div>
-  </main>
+    </main>
 
-  <script src="/static/app.js"></script>
-</body>
+    <script src="/static/app.js"></script>
+  </body>
 </html>

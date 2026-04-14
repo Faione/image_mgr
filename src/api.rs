@@ -88,7 +88,9 @@ pub async fn get_release_notes(
         }
     };
     match state.storage.get_release_notes(&date).await {
-        Ok(n) => axum::Json(serde_json::json!({ "content": n.unwrap_or_default() })).into_response(),
+        Ok(n) => {
+            axum::Json(serde_json::json!({ "content": n.unwrap_or_default() })).into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             axum::Json(serde_json::json!({ "error": e.to_string() })),
@@ -294,7 +296,11 @@ pub async fn create_build(
     tokio::spawn(async move {
         let _ = build::run_build(&cfg, &storage).await;
     });
-    (StatusCode::ACCEPTED, axum::Json(serde_json::json!({ "status": "构建已启动" }))).into_response()
+    (
+        StatusCode::ACCEPTED,
+        axum::Json(serde_json::json!({ "status": "构建已启动" })),
+    )
+        .into_response()
 }
 
 fn admin_token_from_headers(state: &AppState) -> Option<String> {
@@ -480,7 +486,11 @@ pub async fn admin_set_release_notes(
         Ok(s) => s,
         Err(e) => return e.into_response(),
     };
-    match state.storage.set_release_notes(&body.date, &body.content).await {
+    match state
+        .storage
+        .set_release_notes(&body.date, &body.content)
+        .await
+    {
         Ok(()) => axum::Json(serde_json::json!({ "ok": true })).into_response(),
         Err(e) => (
             StatusCode::BAD_REQUEST,

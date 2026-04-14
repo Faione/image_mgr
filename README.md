@@ -62,6 +62,7 @@ cp /path/to/image.iso output/
 ```
 
 说明：
+
 - `admin_token` 配置后，`/admin` 可进行上传/删除/编辑说明等管理操作
 - `uploads_dir` 默认是 `uploads/`，镜像按日期目录存放（`YYYY-MM-DD/`）
 

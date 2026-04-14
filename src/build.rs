@@ -1,4 +1,4 @@
-use crate::config::{Config, BuildConfig};
+use crate::config::{BuildConfig, Config};
 use crate::storage::Storage;
 use chrono::Local;
 use std::path::PathBuf;
@@ -164,7 +164,9 @@ echo hello > output/success.txt
 
         let after_log = get_build_log();
         assert!(after_log.len() >= before_len + 1);
-        let last = after_log.last().expect("build log should contain new record");
+        let last = after_log
+            .last()
+            .expect("build log should contain new record");
         assert_eq!(last.name, "unit-success");
         assert!(last.status == "success" || last.status == "no_output");
 
@@ -187,12 +189,16 @@ echo hello > output/success.txt
             script: "echo bad >&2\nexit 1".to_string(),
         };
 
-        let err = run_build(&cfg, &storage).await.expect_err("build should fail");
+        let err = run_build(&cfg, &storage)
+            .await
+            .expect_err("build should fail");
         assert!(err.to_string().contains("构建脚本执行失败"));
 
         let after_log = get_build_log();
         assert!(after_log.len() >= before_len + 1);
-        let last = after_log.last().expect("build log should contain failed record");
+        let last = after_log
+            .last()
+            .expect("build log should contain failed record");
         assert_eq!(last.name, "unit-fail");
         assert!(last.status.starts_with("failed:"));
 
