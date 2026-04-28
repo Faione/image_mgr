@@ -24,32 +24,6 @@
     ></div>
 
     <main id="app" class="app-with-sidebar">
-      <aside class="left-sidebar">
-        <div class="sidebar-card">
-          <section class="stable-section">
-            <div class="stable-section-head">
-              <h2>固定发布</h2>
-              <button type="button" id="stableEditToggle" class="btn-edit-entry hidden">
-                管理
-              </button>
-            </div>
-            <p class="hint">非每日构建的稳定产物，由管理员维护</p>
-            <div id="stableEditPanel" class="date-group-edit-panel hidden">
-              <label class="edit-label">上传到此栏</label>
-              <div id="stableMiniDrop" class="drop-zone drop-zone-compact">
-                <span class="drop-zone-text">拖放文件或点击选择</span>
-              </div>
-              <div class="edit-row">
-                <input type="file" id="stableFileInput" multiple />
-                <button type="button" id="stableUploadBtn">上传</button>
-              </div>
-            </div>
-            <div id="stableImagesList" class="images-list images-list--inset">
-              <p class="hint">加载中...</p>
-            </div>
-          </section>
-        </div>
-      </aside>
       <div class="main-content">
         <section id="adminInlineSection" class="admin-inline content-panel page-block hidden">
           <header class="panel-title-row">
@@ -144,6 +118,43 @@
           </footer>
         </section>
       </div>
+      <aside class="right-sidebar">
+        <div class="sidebar-card">
+          <section class="stable-section">
+            <div class="stable-section-head">
+              <h2>固定发布</h2>
+              <button type="button" id="stableEditToggle" class="btn-edit-entry hidden">
+                管理
+              </button>
+            </div>
+            <p class="hint">非每日构建的稳定产物，由管理员维护</p>
+            <div id="stableEditPanel" class="date-group-edit-panel hidden">
+              <label class="edit-label" for="stableCategorySelect">上传到分类</label>
+              <select id="stableCategorySelect" aria-label="固定发布分类"></select>
+              <div class="edit-row stable-new-cat-row">
+                <input
+                  type="text"
+                  id="stableNewCategoryId"
+                  placeholder="新分类 id（字母数字、下划线、中划线）"
+                  autocomplete="off"
+                />
+                <button type="button" id="stableAddCategoryBtn">添加分类</button>
+              </div>
+              <label class="edit-label">上传到此栏</label>
+              <div id="stableMiniDrop" class="drop-zone drop-zone-compact">
+                <span class="drop-zone-text">拖放文件或点击选择</span>
+              </div>
+              <div class="edit-row">
+                <input type="file" id="stableFileInput" multiple />
+                <button type="button" id="stableUploadBtn">上传</button>
+              </div>
+            </div>
+            <div id="stableImagesList" class="images-list images-list--inset">
+              <p class="hint">加载中...</p>
+            </div>
+          </section>
+        </div>
+      </aside>
     </main>
 
     <script src="/static/app.js"></script>

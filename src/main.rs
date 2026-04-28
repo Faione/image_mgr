@@ -1,6 +1,7 @@
 mod api;
 mod build;
 mod config;
+mod download_stats;
 mod storage;
 
 use axum::{
@@ -55,7 +56,12 @@ async fn shutdown_signal() {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let config = Arc::new(config::Config::load()?);
-    let storage = Arc::new(storage::Storage::new(config.uploads_dir.clone()));
+    let mut storage = storage::Storage::new(config.uploads_dir.clone());
+    storage.migrate_stable_flat_files().await?;
+    storage.ensure_stable_category("default").await?;
+    let storage = Arc::new(storage);
+    let stats_path = config.uploads_dir.join(".download_stats.json");
+    let downloads = Arc::new(download_stats::DownloadStats::load(stats_path).await?);
 
     let build_handle = build::spawn_scheduler(config.clone(), storage.clone());
 
@@ -72,6 +78,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/release-notes", get(api::get_release_notes))
         .route("/api/dates", get(api::list_dates))
         .route("/api/images/stable", get(api::list_stable_images))
+        .route(
+            "/api/download/stable/:category/:filename",
+            get(api::download_stable_categorized),
+        )
         .route("/api/images/all", get(api::list_all_images))
         .route("/api/images", get(api::list_images))
         .route("/api/download/:date/:filename", get(api::download))
@@ -79,8 +89,20 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/admin/status", get(api::admin_status))
         .route("/api/admin/verify", get(api::admin_verify))
         .route(
+            "/api/admin/image/stable/:category/:filename",
+            delete(api::admin_delete_stable_image),
+        )
+        .route(
             "/api/admin/image/:date/:filename",
             delete(api::admin_delete_image),
+        )
+        .route(
+            "/api/admin/stable/categories",
+            post(api::admin_create_stable_category),
+        )
+        .route(
+            "/api/admin/download-stats",
+            get(api::admin_download_stats),
         )
         .route("/api/admin/upload", post(api::admin_upload))
         .route("/api/admin/announcement", post(api::admin_set_announcement))
@@ -92,7 +114,11 @@ async fn main() -> anyhow::Result<()> {
         .layer(DefaultBodyLimit::disable()) // 关闭 axum 默认 2MB 限制，否则大文件上传会 Failed to fetch
         .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024 * 1024)) // 2GB 上限
         .layer(CorsLayer::permissive())
-        .with_state(api::AppState { config, storage });
+        .with_state(api::AppState {
+            config,
+            storage,
+            downloads,
+        });
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     println!("服务已启动: http://{}", addr);

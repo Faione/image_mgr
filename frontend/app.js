@@ -3,6 +3,8 @@ const PAGE_SIZE = 5;
 const THEME_KEY = 'theme';
 let IS_ADMIN_VIEW = false;
 let IS_ADMIN_AUTH = false;
+/** @type {Record<string, number>} */
+let downloadStatsCache = {};
 
 function initTheme() {
   let theme = localStorage.getItem(THEME_KEY) || 'light';
@@ -66,17 +68,63 @@ function refreshAdminChrome() {
   if (!show) panel.classList.add('hidden');
 }
 
+function populateStableCategorySelect(categoryIds) {
+  const sel = document.getElementById('stableCategorySelect');
+  if (!sel) return;
+  const ids = Array.isArray(categoryIds) ? categoryIds : [];
+  const cur = sel.value;
+  sel.innerHTML = ids.length
+    ? ids.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')
+    : '<option value="default">default</option>';
+  if (cur && ids.includes(cur)) sel.value = cur;
+  else if (ids.includes('default')) sel.value = 'default';
+  else if (ids.length) sel.value = ids[0];
+}
+
+async function ensureDownloadStats() {
+  if (!IS_ADMIN_AUTH) {
+    downloadStatsCache = {};
+    return;
+  }
+  try {
+    const r = await fetchWithAdmin(`${API}/admin/download-stats`);
+    if (!r.ok) return;
+    const data = await r.json();
+    downloadStatsCache = data.counts && typeof data.counts === 'object' ? data.counts : {};
+  } catch (_) {
+    downloadStatsCache = {};
+  }
+}
+
 async function loadStableImages() {
   const list = document.getElementById('stableImagesList');
   if (!list) return;
   try {
+    await ensureDownloadStats();
     const r = await fetch(`${API}/images/stable`);
     const data = r.ok ? await r.json() : null;
-    const images = Array.isArray(data) ? data : [];
-    if (!images.length) {
+    const groups = data && Array.isArray(data.categories) ? data.categories : [];
+    const categoryIds = groups.map((g) => g.category).filter(Boolean);
+    populateStableCategorySelect(categoryIds.length ? categoryIds : ['default']);
+
+    if (!groups.length) {
       list.innerHTML = '<p class="hint">暂无固定发布</p>';
     } else {
-      list.innerHTML = images.map((img) => renderImageItem(img, 'stable')).join('');
+      const html = groups
+        .map((g) => {
+          const cat = g.category || 'default';
+          const images = Array.isArray(g.images) ? g.images : [];
+          const title =
+            groups.length > 1
+              ? `<h3 class="stable-cat-title">${escapeHtml(cat)}</h3>`
+              : '';
+          const body = images.length
+            ? images.map((img) => renderImageItem(img, 'stable', { stableCategory: cat })).join('')
+            : '<p class="hint">该分类下暂无文件</p>';
+          return `<div class="stable-category-block" data-category="${escapeHtml(cat)}">${title}${body}</div>`;
+        })
+        .join('');
+      list.innerHTML = html;
       bindDeleteButtons(list);
     }
   } catch (e) {
@@ -100,10 +148,22 @@ async function loadDates() {
   }
 }
 
-function renderImageItem(img, date) {
+function renderImageItem(img, date, opts = {}) {
   const d = date || '';
+  const stableCat = opts.stableCategory;
+  const statKey =
+    stableCat != null && stableCat !== ''
+      ? `stable/${stableCat}/${img.filename}`
+      : `${d}/${img.filename}`;
+  const dlCount = IS_ADMIN_AUTH ? downloadStatsCache[statKey] || 0 : null;
   const sizeText = formatSize(img.size);
   const timeText = img.modified.slice(0, 19);
+  const dlMeta =
+    IS_ADMIN_AUTH && dlCount !== null
+      ? `
+          <span class="meta-sep">·</span>
+          <span class="meta-dl-count">下载 ${dlCount} 次</span>`
+      : '';
   return `
     <div class="image-item">
       <div class="image-main">
@@ -112,11 +172,12 @@ function renderImageItem(img, date) {
           <span class="meta-size">${sizeText}</span>
           <span class="meta-sep">·</span>
           <span class="meta-time">${timeText}</span>
+          ${dlMeta}
         </div>
       </div>
       <div class="image-actions">
         <a href="${img.url}" download class="btn-download">下载</a>
-        ${renderDeleteButton(d, img.filename)}
+        ${renderDeleteButton(d, img.filename, stableCat)}
       </div>
     </div>
   `;
@@ -133,6 +194,7 @@ async function loadImages(date) {
     list.innerHTML = '<p class="hint">加载中...</p>';
     setReleaseNotesBlock('');
     try {
+      await ensureDownloadStats();
       const [images, notesRes] = await Promise.all([
         fetchJSON(`${API}/images?date=${date}`),
         fetch(`${API}/release-notes?date=${encodeURIComponent(date)}`).then((r) =>
@@ -158,6 +220,8 @@ let allImagesOffset = 0;
 let isLoadingAll = false;
 let isRefreshing = false;
 let pullRefreshBound = false;
+/** 避免移动端 touchend 触发刷新后又合成 click 重复执行 */
+let suppressPullHintClick = false;
 let refreshResetTimer = null;
 
 async function loadAllImages(offset, replace) {
@@ -175,6 +239,7 @@ async function loadAllImages(offset, replace) {
   if (replace) list.innerHTML = '<p class="hint">加载中...</p>';
 
   try {
+    await ensureDownloadStats();
     const data = await fetchJSON(`${API}/images/all?offset=${offset}&limit=${PAGE_SIZE}`);
     const items = data.items || [];
 
@@ -224,8 +289,11 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-function renderDeleteButton(date, filename) {
+function renderDeleteButton(date, filename, stableCategory) {
   if (!IS_ADMIN_VIEW || !IS_ADMIN_AUTH) return '';
+  if (stableCategory != null && stableCategory !== '') {
+    return `<button type="button" class="btn-delete" data-stable="1" data-category="${escapeHtml(stableCategory)}" data-filename="${escapeHtml(filename)}">删除</button>`;
+  }
   return `<button type="button" class="btn-delete" data-date="${escapeHtml(date)}" data-filename="${escapeHtml(filename)}">删除</button>`;
 }
 
@@ -399,7 +467,11 @@ async function doAdminUploadToTarget(files, target, triggerBtn) {
   try {
     const fd = new FormData();
     for (let i = 0; i < files.length; i++) fd.append('file', files[i]);
-    const url = `${API}/admin/upload?target=${encodeURIComponent(target)}`;
+    let url = `${API}/admin/upload?target=${encodeURIComponent(target)}`;
+    if (target === 'stable') {
+      const cat = document.getElementById('stableCategorySelect')?.value || 'default';
+      url += `&category=${encodeURIComponent(cat)}`;
+    }
     const result = await uploadWithProgress(url, fd, (percent) => {
       if (triggerBtn) triggerBtn.textContent = `上传中 ${percent}%`;
     });
@@ -437,6 +509,7 @@ function setupStableAdminPanel() {
   const drop = document.getElementById('stableMiniDrop');
   const input = document.getElementById('stableFileInput');
   const btn = document.getElementById('stableUploadBtn');
+  const addCatBtn = document.getElementById('stableAddCategoryBtn');
   if (!toggle || !panel || !drop || !input || !btn) return;
   toggle.onclick = () => panel.classList.toggle('hidden');
   btn.onclick = async () => {
@@ -444,6 +517,31 @@ function setupStableAdminPanel() {
     input.value = '';
   };
   bindCompactDropZone(drop, input, (files) => doAdminUploadToTarget(files, 'stable'));
+  if (addCatBtn) {
+    addCatBtn.onclick = async () => {
+      const idInput = document.getElementById('stableNewCategoryId');
+      const id = (idInput && idInput.value.trim()) || '';
+      if (!id) {
+        alert('请输入分类 id');
+        return;
+      }
+      const r = await fetchWithAdmin(`${API}/admin/stable/categories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        if (idInput) idInput.value = '';
+        await loadStableImages();
+        const sel = document.getElementById('stableCategorySelect');
+        if (sel && data.id) sel.value = data.id;
+        alert('分类已添加');
+      } else {
+        alert(data.error || '添加失败');
+      }
+    };
+  }
 }
 
 function bindDeleteButtons(root) {
@@ -451,11 +549,20 @@ function bindDeleteButtons(root) {
   root.querySelectorAll('.btn-delete').forEach((btn) => {
     btn.onclick = async () => {
       if (!confirm('确定删除该镜像？')) return;
-      const date = btn.dataset.date;
       const filename = btn.dataset.filename;
-      const r = await fetchWithAdmin(`${API}/admin/image/${date}/${encodeURIComponent(filename)}`, {
-        method: 'DELETE',
-      });
+      let r;
+      if (btn.dataset.stable === '1') {
+        const cat = btn.dataset.category || 'default';
+        r = await fetchWithAdmin(
+          `${API}/admin/image/stable/${encodeURIComponent(cat)}/${encodeURIComponent(filename)}`,
+          { method: 'DELETE' }
+        );
+      } else {
+        const date = btn.dataset.date;
+        r = await fetchWithAdmin(`${API}/admin/image/${encodeURIComponent(date)}/${encodeURIComponent(filename)}`, {
+          method: 'DELETE',
+        });
+      }
       if (r.ok) {
         const currentDate = document.getElementById('dateSelect')?.value || '';
         await Promise.all([loadStableImages(), loadImages(currentDate)]);
@@ -467,10 +574,29 @@ function bindDeleteButtons(root) {
   });
 }
 
+/** 当前页面是否在「顶部」附近（兼容 document / body / scrollingElement） */
+function getPageScrollTop() {
+  const root = document.scrollingElement || document.documentElement;
+  return (
+    window.scrollY || root.scrollTop || document.body.scrollTop || 0
+  );
+}
+
 function canTriggerPullRefresh(section) {
-  const sectionTop = section ? section.scrollTop <= 0 : true;
-  const pageTop = window.scrollY <= 0;
-  return sectionTop || pageTop;
+  if (getPageScrollTop() > 2) return false;
+  const sec = section || document.getElementById('imagesSection');
+  if (sec && sec.scrollTop > 2) return false;
+  return true;
+}
+
+/** 从按钮、链接、表单控件开始的触摸不当作下拉手势，避免误触发 */
+function shouldIgnorePullTouchTarget(target) {
+  if (!target || !target.closest) return false;
+  const el = target.nodeType === Node.TEXT_NODE ? target.parentElement : target;
+  if (!el) return false;
+  return !!el.closest(
+    'button, a, input, select, textarea, label, [role="button"], option'
+  );
 }
 
 async function doRefresh() {
@@ -511,47 +637,68 @@ function setupPullRefresh() {
   let startY = 0;
   let pulling = false;
 
-  hint.addEventListener('click', () => doRefresh());
+  hint.addEventListener('click', (e) => {
+    if (suppressPullHintClick) {
+      e.preventDefault();
+      return;
+    }
+    doRefresh();
+  });
 
-  section.addEventListener(
-    'touchstart',
-    (e) => {
-      if (!canTriggerPullRefresh(section) || isRefreshing) {
-        pulling = false;
-        return;
-      }
-      pulling = true;
-      startY = e.touches[0].clientY;
-    },
-    { passive: true }
-  );
-
-  section.addEventListener(
-    'touchmove',
-    (e) => {
-      if (!pulling || isRefreshing) return;
-      if (e.touches[0].clientY - startY > 30) {
-        hint.textContent = '释放刷新';
-      } else {
-        hint.textContent = '下拉刷新';
-      }
-    },
-    { passive: true }
-  );
-
-  section.addEventListener(
-    'touchend',
-    (e) => {
-      if (!pulling || isRefreshing) return;
+  const onTouchStart = (e) => {
+    if (!e.touches || e.touches.length !== 1) return;
+    if (!canTriggerPullRefresh(section) || isRefreshing) {
       pulling = false;
-      if (e.changedTouches[0].clientY - startY > 60) {
-        doRefresh();
-      } else {
-        hint.textContent = '下拉刷新';
-      }
-    },
-    { passive: true }
-  );
+      return;
+    }
+    if (shouldIgnorePullTouchTarget(e.target)) {
+      pulling = false;
+      return;
+    }
+    pulling = true;
+    startY = e.touches[0].clientY;
+  };
+
+  const onTouchMove = (e) => {
+    if (!pulling || isRefreshing) return;
+    if (!canTriggerPullRefresh(section)) {
+      pulling = false;
+      hint.textContent = '下拉刷新';
+      return;
+    }
+    if (!e.touches || e.touches.length < 1) return;
+    if (e.touches[0].clientY - startY > 30) {
+      hint.textContent = '释放刷新';
+    } else {
+      hint.textContent = '下拉刷新';
+    }
+  };
+
+  const onTouchEnd = (e) => {
+    if (!pulling || isRefreshing) return;
+    pulling = false;
+    const t = e.changedTouches && e.changedTouches[0];
+    const endY = t ? t.clientY : startY;
+    if (endY - startY > 60) {
+      suppressPullHintClick = true;
+      setTimeout(() => {
+        suppressPullHintClick = false;
+      }, 480);
+      doRefresh();
+    } else {
+      hint.textContent = '下拉刷新';
+    }
+  };
+
+  const onTouchCancel = () => {
+    pulling = false;
+    if (!isRefreshing && hint) hint.textContent = '下拉刷新';
+  };
+
+  window.addEventListener('touchstart', onTouchStart, { passive: true });
+  window.addEventListener('touchmove', onTouchMove, { passive: true });
+  window.addEventListener('touchend', onTouchEnd, { passive: true });
+  window.addEventListener('touchcancel', onTouchCancel, { passive: true });
 }
 
 function initImagesPage() {

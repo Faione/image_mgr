@@ -215,6 +215,172 @@ impl Storage {
     fn is_valid_date_dir(name: &str) -> bool {
         name.len() == 10 && name.chars().all(|c| c.is_ascii_digit() || c == '-') && name != "stable"
     }
+
+    pub fn stable_root(&self) -> PathBuf {
+        self.root.join("stable")
+    }
+
+    /// 将旧版「直接写在 stable 根目录」的文件迁入 `stable/default/`
+    pub async fn migrate_stable_flat_files(&self) -> anyhow::Result<()> {
+        let stable = self.stable_root();
+        if !stable.is_dir() {
+            return Ok(());
+        }
+        let default_dir = stable.join("default");
+        let mut entries = fs::read_dir(&stable).await?;
+        let mut files = Vec::new();
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if !name.starts_with('.') && name != RELEASE_NOTES_FILENAME {
+                        files.push(name.to_string());
+                    }
+                }
+            }
+        }
+        if files.is_empty() {
+            return Ok(());
+        }
+        fs::create_dir_all(&default_dir).await?;
+        for name in files {
+            let from = stable.join(&name);
+            let to = default_dir.join(&name);
+            if !to.exists() {
+                fs::rename(&from, &to).await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn is_valid_stable_category_slug(s: &str) -> bool {
+        if s.is_empty() || s.len() > 64 {
+            return false;
+        }
+        if s.starts_with('.') {
+            return false;
+        }
+        s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    }
+
+    /// `stable/<category>/` 下列出镜像文件
+    pub async fn list_stable_category_images(&self, category: &str) -> anyhow::Result<Vec<ImageInfo>> {
+        if !Self::is_valid_stable_category_slug(category) {
+            anyhow::bail!("非法分类标识");
+        }
+        let dir = self.stable_root().join(category);
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+        let mut images = Vec::new();
+        let mut entries = fs::read_dir(&dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.is_file() {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name == RELEASE_NOTES_FILENAME {
+                    continue;
+                }
+                let meta = fs::metadata(&path).await?;
+                let modified: DateTime<Local> = meta.modified()?.into();
+                images.push(ImageInfo {
+                    filename: name.to_string(),
+                    size: meta.len(),
+                    modified,
+                });
+            }
+        }
+        images.sort_by_key(|i| std::cmp::Reverse(i.modified));
+        Ok(images)
+    }
+
+    /// 返回 sorted 的分类目录名列表（仅一层子目录）
+    pub async fn list_stable_categories(&self) -> anyhow::Result<Vec<String>> {
+        let stable = self.stable_root();
+        if !stable.exists() {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        let mut entries = fs::read_dir(&stable).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.is_dir() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if !name.starts_with('.') && Self::is_valid_stable_category_slug(name) {
+                        out.push(name.to_string());
+                    }
+                }
+            }
+        }
+        out.sort();
+        Ok(out)
+    }
+
+    pub fn stable_file_path(&self, category: &str, filename: &str) -> PathBuf {
+        self.stable_root().join(category).join(filename)
+    }
+
+    pub async fn ensure_stable_category(&self, category: &str) -> anyhow::Result<()> {
+        if !Self::is_valid_stable_category_slug(category) {
+            anyhow::bail!("非法分类标识");
+        }
+        let dir = self.stable_root().join(category);
+        fs::create_dir_all(&dir).await?;
+        Ok(())
+    }
+
+    pub async fn prepare_upload_path_stable(
+        &self,
+        category: &str,
+        suggested_name: &str,
+    ) -> anyhow::Result<(String, PathBuf)> {
+        if !Self::is_valid_stable_category_slug(category) {
+            anyhow::bail!("非法分类标识");
+        }
+        if suggested_name.contains("..")
+            || suggested_name.contains('/')
+            || suggested_name.contains('\\')
+        {
+            anyhow::bail!("非法文件名");
+        }
+        if suggested_name == RELEASE_NOTES_FILENAME {
+            anyhow::bail!("请勿上传该文件名");
+        }
+        let dir = self.stable_root().join(category);
+        fs::create_dir_all(&dir).await?;
+
+        let (stem, ext) = match suggested_name.rfind('.') {
+            Some(i) => (
+                suggested_name[..i].to_string(),
+                suggested_name[i..].to_string(),
+            ),
+            None => (suggested_name.to_string(), String::new()),
+        };
+
+        let mut filename = suggested_name.to_string();
+        let mut n = 0u32;
+        while self.stable_file_path(category, &filename).exists() {
+            n += 1;
+            filename = format!("{}_{}{}", stem, n, ext);
+        }
+        let path = self.stable_file_path(category, &filename);
+        Ok((filename, path))
+    }
+
+    pub async fn delete_stable_image(&self, category: &str, filename: &str) -> anyhow::Result<()> {
+        if !Self::is_valid_stable_category_slug(category) {
+            anyhow::bail!("非法分类标识");
+        }
+        if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+            anyhow::bail!("非法文件名");
+        }
+        let path = self.stable_file_path(category, filename);
+        if path.exists() {
+            fs::remove_file(&path).await?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

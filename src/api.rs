@@ -1,5 +1,6 @@
 use crate::build;
 use crate::config::Config;
+use crate::download_stats::DownloadStats;
 use crate::storage::Storage;
 use axum::{
     extract::{FromRequest, Multipart, Path, Query, Request, State},
@@ -13,6 +14,7 @@ use tokio::{fs::File, io::AsyncWriteExt};
 pub struct AppState {
     pub config: Arc<Config>,
     pub storage: Arc<Storage>,
+    pub downloads: Arc<DownloadStats>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,6 +38,14 @@ fn default_limit() -> usize {
 pub struct UploadTargetQuery {
     /// 为 "stable" 时上传到固定发布栏，否则上传到当日目录
     target: Option<String>,
+    /// stable 时使用，上传到 `stable/<category>/`，默认 default
+    category: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StableCategoryBody {
+    /// 分类目录名（小写字母数字下划线与中划线）
+    pub id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -134,7 +144,12 @@ pub async fn list_all_images(
                             filename: filename.clone(),
                             size: i.size,
                             modified: i.modified.to_rfc3339(),
-                            url: format!("/api/download/{}/{}", date, filename),
+                            url: format!(
+                                "/api/download/{}/{}",
+                                enc_path(&date),
+                                enc_path(&filename)
+                            ),
+                            category: None,
                         }
                     })
                     .collect();
@@ -155,24 +170,39 @@ pub async fn list_all_images(
     }
 }
 
-/// 固定发布栏镜像列表（非按日期，仅管理员维护）
+/// 固定发布：按分类返回镜像分组（产物位于 `stable/<category>/`）
 pub async fn list_stable_images(State(state): State<AppState>) -> impl IntoResponse {
-    const STABLE: &str = "stable";
-    match state.storage.list_images(STABLE).await {
-        Ok(images) => {
-            let list: Vec<ImageResponse> = images
-                .into_iter()
-                .map(|i| {
-                    let filename = i.filename.clone();
-                    ImageResponse {
-                        filename: filename.clone(),
-                        size: i.size,
-                        modified: i.modified.to_rfc3339(),
-                        url: format!("/api/download/{}/{}", STABLE, filename),
-                    }
-                })
-                .collect();
-            axum::Json(list).into_response()
+    match state.storage.list_stable_categories().await {
+        Ok(categories) => {
+            let mut groups = Vec::new();
+            for cat in categories {
+                let images = match state.storage.list_stable_category_images(&cat).await {
+                    Ok(im) => im,
+                    Err(_) => continue,
+                };
+                let list: Vec<ImageResponse> = images
+                    .into_iter()
+                    .map(|i| {
+                        let filename = i.filename.clone();
+                        ImageResponse {
+                            filename: filename.clone(),
+                            size: i.size,
+                            modified: i.modified.to_rfc3339(),
+                            url: format!(
+                                "/api/download/stable/{}/{}",
+                                enc_path(&cat),
+                                enc_path(&filename)
+                            ),
+                            category: Some(cat.clone()),
+                        }
+                    })
+                    .collect();
+                groups.push(serde_json::json!({
+                    "category": cat,
+                    "images": list,
+                }));
+            }
+            axum::Json(serde_json::json!({ "categories": groups })).into_response()
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -207,7 +237,12 @@ pub async fn list_images(
                         filename: filename.clone(),
                         size: i.size,
                         modified: i.modified.to_rfc3339(),
-                        url: format!("/api/download/{}/{}", date, filename),
+                        url: format!(
+                            "/api/download/{}/{}",
+                            enc_path(&date),
+                            enc_path(&filename)
+                        ),
+                        category: None,
                     }
                 })
                 .collect();
@@ -227,8 +262,19 @@ struct ImageResponse {
     size: u64,
     modified: String,
     url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
 }
 
+fn enc_path(seg: &str) -> String {
+    urlencoding::encode(seg).into_owned()
+}
+
+async fn increment_download_stat(state: &AppState, key: &str) {
+    let _ = state.downloads.increment(key).await;
+}
+
+/// 单日目录下载：`GET /api/download/:YYYY-MM-DD/:filename`，以及兼容旧路径 `GET /api/download/stable/:filename` → `stable/default/`
 pub async fn download(
     State(state): State<AppState>,
     Path((date, filename)): Path<(String, String)>,
@@ -236,22 +282,72 @@ pub async fn download(
     if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
         return (StatusCode::BAD_REQUEST, "非法文件名").into_response();
     }
-    let path = state.storage.file_path(&date, &filename);
+    let (path, stat_key) = if date == "stable" {
+        // 兼容旧链接：`/api/download/stable/<文件名>` → `stable/default/<文件名>`
+        let path = state.storage.stable_file_path("default", &filename);
+        let stat_key = format!("stable/default/{}", filename);
+        (path, stat_key)
+    } else if date.len() != 10 || date.chars().any(|c| !c.is_ascii_digit() && c != '-') {
+        return (StatusCode::BAD_REQUEST, "非法日期路径").into_response();
+    } else {
+        (
+            state.storage.file_path(&date, &filename),
+            format!("{}/{}", date, filename),
+        )
+    };
     if !path.exists() {
         return (StatusCode::NOT_FOUND, "文件不存在").into_response();
     }
     match tokio::fs::read(&path).await {
-        Ok(data) => (
-            [
-                ("Content-Type", "application/octet-stream"),
-                (
-                    "Content-Disposition",
-                    &format!("attachment; filename=\"{}\"", filename),
-                ),
-            ],
-            data,
-        )
-            .into_response(),
+        Ok(data) => {
+            increment_download_stat(&state, &stat_key).await;
+            (
+                [
+                    ("Content-Type", "application/octet-stream"),
+                    (
+                        "Content-Disposition",
+                        &format!("attachment; filename=\"{}\"", filename),
+                    ),
+                ],
+                data,
+            )
+                .into_response()
+        }
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "读取文件失败").into_response(),
+    }
+}
+
+/// 固定发布分目录：`GET /api/download/stable/:category/:filename`
+pub async fn download_stable_categorized(
+    State(state): State<AppState>,
+    Path((category, filename)): Path<(String, String)>,
+) -> Response {
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return (StatusCode::BAD_REQUEST, "非法文件名").into_response();
+    }
+    if !Storage::is_valid_stable_category_slug(&category) {
+        return (StatusCode::BAD_REQUEST, "非法分类").into_response();
+    }
+    let path = state.storage.stable_file_path(&category, &filename);
+    if !path.exists() {
+        return (StatusCode::NOT_FOUND, "文件不存在").into_response();
+    }
+    let stat_key = format!("stable/{}/{}", category, filename);
+    match tokio::fs::read(&path).await {
+        Ok(data) => {
+            increment_download_stat(&state, &stat_key).await;
+            (
+                [
+                    ("Content-Type", "application/octet-stream"),
+                    (
+                        "Content-Disposition",
+                        &format!("attachment; filename=\"{}\"", filename),
+                    ),
+                ],
+                data,
+            )
+                .into_response()
+        }
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "读取文件失败").into_response(),
     }
 }
@@ -366,10 +462,94 @@ pub async fn admin_delete_image(
         Err(e) => return e.into_response(),
     };
 
-    match state.storage.delete_image(&date, &filename).await {
+    let res = if date == "stable" {
+        state.storage.delete_stable_image("default", &filename).await
+    } else {
+        state.storage.delete_image(&date, &filename).await
+    };
+    match res {
         Ok(()) => axum::Json(serde_json::json!({ "ok": true })).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// 删除固定发布某分类下的文件（路径含分类）
+pub async fn admin_delete_stable_image(
+    State(state): State<AppState>,
+    Path((category, filename)): Path<(String, String)>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let state = match require_admin(State(state), token).await {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+
+    match state.storage.delete_stable_image(&category, &filename).await {
+        Ok(()) => axum::Json(serde_json::json!({ "ok": true })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn admin_download_stats(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let state = match require_admin(State(state), token).await {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+    let counts = state.downloads.snapshot().await;
+    axum::Json(serde_json::json!({ "counts": counts })).into_response()
+}
+
+pub async fn admin_create_stable_category(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    axum::Json(body): axum::Json<StableCategoryBody>,
+) -> impl IntoResponse {
+    let token = headers
+        .get("X-Admin-Token")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let state = match require_admin(State(state), token).await {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+    let id = body.id.trim().to_string();
+    if id.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            axum::Json(serde_json::json!({ "error": "分类 id 不能为空" })),
+        )
+            .into_response();
+    }
+    if !Storage::is_valid_stable_category_slug(&id) {
+        return (
+            StatusCode::BAD_REQUEST,
+            axum::Json(serde_json::json!({ "error": "非法分类标识（仅用字母数字、下划线与中划线）" })),
+        )
+            .into_response();
+    }
+    match state.storage.ensure_stable_category(&id).await {
+        Ok(()) => axum::Json(serde_json::json!({ "ok": true, "id": id })).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
             axum::Json(serde_json::json!({ "error": e.to_string() })),
         )
             .into_response(),
@@ -403,12 +583,29 @@ pub async fn admin_upload(
         }
     };
 
-    let date = if q.target.as_deref() == Some("stable") {
-        "stable".to_string()
+    let (upload_to_stable, stable_category, date_dir) = if q.target.as_deref() == Some("stable") {
+        let cat = q
+            .category
+            .as_deref()
+            .unwrap_or("default")
+            .trim()
+            .to_string();
+        if !Storage::is_valid_stable_category_slug(&cat) {
+            return (
+                StatusCode::BAD_REQUEST,
+                axum::Json(serde_json::json!({ "error": "非法分类标识" })),
+            )
+                .into_response();
+        }
+        (true, Some(cat), String::new())
     } else if let Some(t) = q.target {
-        t
+        (false, None, t)
     } else {
-        chrono::Local::now().format("%Y-%m-%d").to_string()
+        (
+            false,
+            None,
+            chrono::Local::now().format("%Y-%m-%d").to_string(),
+        )
     };
     let mut saved = Vec::new();
 
@@ -417,9 +614,25 @@ pub async fn admin_upload(
             Some(n) if !n.is_empty() => n,
             _ => continue,
         };
-        let (actual_name, path) = match state.storage.prepare_upload_path(&date, &filename).await {
-            Ok(v) => v,
-            Err(_) => continue,
+        let (actual_name, path) = if upload_to_stable {
+            let cat = stable_category.as_deref().expect("stable category");
+            match state
+                .storage
+                .prepare_upload_path_stable(cat, &filename)
+                .await
+            {
+                Ok(v) => v,
+                Err(_) => continue,
+            }
+        } else {
+            match state
+                .storage
+                .prepare_upload_path(&date_dir, &filename)
+                .await
+            {
+                Ok(v) => v,
+                Err(_) => continue,
+            }
         };
 
         let mut out = match File::create(&path).await {
@@ -439,7 +652,19 @@ pub async fn admin_upload(
             ok = false;
         }
         if ok {
-            saved.push(serde_json::json!({ "date": date, "filename": actual_name }));
+            if upload_to_stable {
+                let cat = stable_category.as_deref().unwrap();
+                saved.push(serde_json::json!({
+                    "target": "stable",
+                    "category": cat,
+                    "filename": actual_name,
+                }));
+            } else {
+                saved.push(serde_json::json!({
+                    "date": date_dir,
+                    "filename": actual_name,
+                }));
+            }
         } else {
             let _ = tokio::fs::remove_file(&path).await;
         }
@@ -514,10 +739,17 @@ mod tests {
     }
 
     async fn make_state(admin_token: Option<&str>) -> AppState {
+        use crate::download_stats::DownloadStats;
         let root = unique_temp_dir("api_test_storage");
         tokio::fs::create_dir_all(&root)
             .await
             .expect("create api test storage");
+        let stats_path = root.join(".download_stats.json");
+        let downloads = Arc::new(
+            DownloadStats::load(stats_path)
+                .await
+                .expect("load download stats"),
+        );
         AppState {
             config: Arc::new(Config {
                 port: 3000,
@@ -526,6 +758,7 @@ mod tests {
                 admin_token: admin_token.map(|s| s.to_string()),
             }),
             storage: Arc::new(Storage::new(root)),
+            downloads,
         }
     }
 
