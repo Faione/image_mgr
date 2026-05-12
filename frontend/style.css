@@ -190,7 +190,6 @@ body {
   border-radius: 8px;
   font-size: 0.9rem;
   color: var(--text);
-  white-space: pre-wrap;
   word-break: break-word;
 }
 
@@ -213,11 +212,22 @@ body {
 }
 .date-group .group-release-notes {
   padding: 0.5rem 1rem 0.75rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-  white-space: pre-wrap;
+  font-size: 0.875rem;
+  color: var(--text);
   word-break: break-word;
   border-bottom: 1px solid var(--border);
+}
+
+.date-group .group-release-notes.announcement-md {
+  white-space: normal;
+}
+
+.date-group .group-release-notes.announcement-md :first-child {
+  margin-top: 0;
+}
+
+.date-group .group-release-notes.announcement-md :last-child {
+  margin-bottom: 0;
 }
 
 h1 {
@@ -250,7 +260,7 @@ main {
 .app-with-sidebar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(156px, clamp(168px, 13vw, 220px));
-  column-gap: clamp(0.875rem, 1.8vw, 1.5rem);
+  column-gap: clamp(2rem, 4vw, 3.75rem);
   row-gap: var(--stack-gap);
   width: 100%;
   max-width: none;
@@ -266,8 +276,8 @@ main {
   position: sticky;
   top: 1rem;
   align-self: start;
-  padding-left: clamp(0.65rem, 1.2vw, 1.1rem);
-  margin-left: 0;
+  padding-left: clamp(1rem, 2vw, 1.85rem);
+  margin-left: clamp(0.75rem, 1.6vw, 1.5rem);
   border-left: 1px solid var(--border);
 }
 
@@ -285,7 +295,8 @@ main {
     border-left: none;
     padding-left: 0;
     padding-top: 1rem;
-    margin-top: 0.25rem;
+    margin-top: 1rem;
+    margin-left: 0;
     border-top: 1px solid var(--border);
     order: 1;
   }

@@ -1,6 +1,8 @@
 const API = '/api';
 const PAGE_SIZE = 5;
 const THEME_KEY = 'theme';
+/** 刷新提示在非进行中时的文案（与 index.html 初始文案一致） */
+const PULL_HINT_IDLE = '下拉或滚轮刷新';
 let IS_ADMIN_VIEW = false;
 let IS_ADMIN_AUTH = false;
 /** @type {Record<string, number>} */
@@ -84,15 +86,16 @@ async function loadAnnouncement() {
 }
 
 function setReleaseNotesBlock(text) {
-  const el = document.getElementById('releaseNotesBlock');
-  if (!el) return;
+  const wrap = document.getElementById('releaseNotesBlock');
+  const inner = document.getElementById('releaseNotesInner');
+  if (!wrap || !inner) return;
   const t = (text || '').trim();
   if (t) {
-    el.textContent = t;
-    el.classList.remove('hidden');
+    inner.innerHTML = renderAnnouncementMarkdown(t);
+    wrap.classList.remove('hidden');
   } else {
-    el.textContent = '';
-    el.classList.add('hidden');
+    inner.innerHTML = '';
+    wrap.classList.add('hidden');
   }
 }
 
@@ -339,7 +342,7 @@ function renderDateEditPanel(date, notes) {
   const n = escapeHtml(notes || '');
   return `
     <div class="date-group-edit-panel hidden js-date-edit-panel" data-date="${d}">
-      <label class="edit-label">当日发布说明</label>
+      <label class="edit-label">当日发布说明（支持 Markdown）</label>
       <textarea class="js-release-notes-ta" rows="3" data-date="${d}">${n}</textarea>
       <div class="edit-row">
         <button type="button" class="js-save-release-notes" data-date="${d}">保存说明</button>
@@ -359,7 +362,9 @@ function renderDateGroupBlock(g) {
   const date = g.date;
   const notes = (g.notes || '').trim();
   const images = g.images || [];
-  const notesHtml = notes ? `<div class="group-release-notes">${escapeHtml(notes)}</div>` : '';
+  const notesHtml = notes
+    ? `<div class="group-release-notes announcement-md">${renderAnnouncementMarkdown(notes)}</div>`
+    : '';
   const adminHeader =
     IS_ADMIN_VIEW && IS_ADMIN_AUTH
       ? `<div class="date-group-header"><div class="date-group-title">${escapeHtml(date)}</div><button type="button" class="btn-edit-entry js-toggle-date-edit" data-date="${escapeHtml(date)}">管理</button></div>`
@@ -373,7 +378,7 @@ function renderDateGroupBlock(g) {
 
 function renderSingleDateBlock(date, images, notesTrimmed) {
   const notesHtml = notesTrimmed
-    ? `<div class="group-release-notes">${escapeHtml(notesTrimmed)}</div>`
+    ? `<div class="group-release-notes announcement-md">${renderAnnouncementMarkdown(notesTrimmed)}</div>`
     : '';
   const adminHeader =
     IS_ADMIN_VIEW && IS_ADMIN_AUTH
@@ -641,6 +646,70 @@ function shouldIgnorePullPointerTarget(target) {
   );
 }
 
+function normalizeWheelDeltaY(e) {
+  const dy = Math.abs(e.deltaY);
+  if (e.deltaMode === 1) return dy * 16;
+  if (e.deltaMode === 2) return dy * 900;
+  return dy;
+}
+
+/** 滚轮刷新：跳过侧栏与表单区域，避免与局部滚动冲突 */
+function shouldIgnoreWheelPullTarget(target) {
+  if (!target || !target.closest) return false;
+  const el = target.nodeType === Node.TEXT_NODE ? target.parentElement : target;
+  if (!el) return false;
+  if (el.closest('.right-sidebar')) return true;
+  return !!el.closest(
+    'textarea, input, select, [contenteditable="true"], .build-log'
+  );
+}
+
+function attachWheelPullRefresh(section) {
+  let accum = 0;
+  let idleTimer = null;
+  const hint = document.getElementById('pullHint');
+
+  window.addEventListener(
+    'wheel',
+    (e) => {
+      if (isRefreshing) return;
+      if (!canTriggerPullRefresh(section)) {
+        accum = 0;
+        return;
+      }
+      if (shouldIgnoreWheelPullTarget(e.target)) {
+        accum = 0;
+        return;
+      }
+      if (e.deltaY > 2) {
+        accum = 0;
+        return;
+      }
+
+      accum += normalizeWheelDeltaY(e);
+
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        accum = 0;
+        idleTimer = null;
+        if (hint && !isRefreshing && hint.textContent !== '刷新中') {
+          hint.textContent = PULL_HINT_IDLE;
+        }
+      }, 520);
+
+      if (accum >= 55) {
+        accum = 0;
+        if (idleTimer) {
+          clearTimeout(idleTimer);
+          idleTimer = null;
+        }
+        doRefresh();
+      }
+    },
+    { passive: true }
+  );
+}
+
 async function doRefresh() {
   const hint = document.getElementById('pullHint');
   if (!hint || isRefreshing) return;
@@ -658,14 +727,14 @@ async function doRefresh() {
     hint.classList.remove('is-loading');
     hint.classList.add('refresh-done');
     refreshResetTimer = setTimeout(() => {
-      hint.textContent = '下拉刷新';
+      hint.textContent = PULL_HINT_IDLE;
       hint.classList.remove('refreshing', 'refresh-done');
       refreshResetTimer = null;
     }, 1200);
   } finally {
     isRefreshing = false;
     if (!refreshResetTimer) {
-      hint.textContent = '下拉刷新';
+      hint.textContent = PULL_HINT_IDLE;
       hint.classList.remove('refreshing', 'is-loading', 'refresh-done');
     }
   }
@@ -709,13 +778,13 @@ function setupPullRefresh() {
     if (!canTriggerPullRefresh(section)) {
       pulling = false;
       activePointerId = null;
-      hint.textContent = '下拉刷新';
+      hint.textContent = PULL_HINT_IDLE;
       return;
     }
     if (e.clientY - startY > 28) {
       hint.textContent = '释放刷新';
     } else {
-      hint.textContent = '下拉刷新';
+      hint.textContent = PULL_HINT_IDLE;
     }
   };
 
@@ -733,7 +802,7 @@ function setupPullRefresh() {
       }, 480);
       doRefresh();
     } else {
-      hint.textContent = '下拉刷新';
+      hint.textContent = PULL_HINT_IDLE;
     }
   };
 
@@ -741,7 +810,7 @@ function setupPullRefresh() {
     if (activePointerId == null || e.pointerId !== activePointerId) return;
     activePointerId = null;
     pulling = false;
-    if (!isRefreshing && hint) hint.textContent = '下拉刷新';
+    if (!isRefreshing && hint) hint.textContent = PULL_HINT_IDLE;
   };
 
   if (window.PointerEvent) {
@@ -749,70 +818,71 @@ function setupPullRefresh() {
     window.addEventListener('pointermove', onPointerMove, { passive: true });
     window.addEventListener('pointerup', onPointerUp, { passive: true });
     window.addEventListener('pointercancel', onPointerCancel, { passive: true });
-    return;
+  } else {
+    let touchStartY = 0;
+    let touchPulling = false;
+    window.addEventListener(
+      'touchstart',
+      (ev) => {
+        if (!ev.touches || ev.touches.length !== 1) return;
+        if (!canTriggerPullRefresh(section) || isRefreshing) {
+          touchPulling = false;
+          return;
+        }
+        if (shouldIgnorePullPointerTarget(ev.target)) {
+          touchPulling = false;
+          return;
+        }
+        touchPulling = true;
+        touchStartY = ev.touches[0].clientY;
+      },
+      { passive: true }
+    );
+    window.addEventListener(
+      'touchmove',
+      (ev) => {
+        if (!touchPulling || isRefreshing) return;
+        if (!canTriggerPullRefresh(section)) {
+          touchPulling = false;
+          hint.textContent = PULL_HINT_IDLE;
+          return;
+        }
+        if (!ev.touches || ev.touches.length < 1) return;
+        if (ev.touches[0].clientY - touchStartY > 28) hint.textContent = '释放刷新';
+        else hint.textContent = PULL_HINT_IDLE;
+      },
+      { passive: true }
+    );
+    window.addEventListener(
+      'touchend',
+      (ev) => {
+        if (!touchPulling || isRefreshing) return;
+        touchPulling = false;
+        const t = ev.changedTouches && ev.changedTouches[0];
+        const endY = t ? t.clientY : touchStartY;
+        if (endY - touchStartY > 48) {
+          suppressPullHintClick = true;
+          setTimeout(() => {
+            suppressPullHintClick = false;
+          }, 480);
+          doRefresh();
+        } else {
+          hint.textContent = PULL_HINT_IDLE;
+        }
+      },
+      { passive: true }
+    );
+    window.addEventListener(
+      'touchcancel',
+      () => {
+        touchPulling = false;
+        if (!isRefreshing && hint) hint.textContent = PULL_HINT_IDLE;
+      },
+      { passive: true }
+    );
   }
 
-  let touchStartY = 0;
-  let touchPulling = false;
-  window.addEventListener(
-    'touchstart',
-    (ev) => {
-      if (!ev.touches || ev.touches.length !== 1) return;
-      if (!canTriggerPullRefresh(section) || isRefreshing) {
-        touchPulling = false;
-        return;
-      }
-      if (shouldIgnorePullPointerTarget(ev.target)) {
-        touchPulling = false;
-        return;
-      }
-      touchPulling = true;
-      touchStartY = ev.touches[0].clientY;
-    },
-    { passive: true }
-  );
-  window.addEventListener(
-    'touchmove',
-    (ev) => {
-      if (!touchPulling || isRefreshing) return;
-      if (!canTriggerPullRefresh(section)) {
-        touchPulling = false;
-        hint.textContent = '下拉刷新';
-        return;
-      }
-      if (!ev.touches || ev.touches.length < 1) return;
-      if (ev.touches[0].clientY - touchStartY > 28) hint.textContent = '释放刷新';
-      else hint.textContent = '下拉刷新';
-    },
-    { passive: true }
-  );
-  window.addEventListener(
-    'touchend',
-    (ev) => {
-      if (!touchPulling || isRefreshing) return;
-      touchPulling = false;
-      const t = ev.changedTouches && ev.changedTouches[0];
-      const endY = t ? t.clientY : touchStartY;
-      if (endY - touchStartY > 48) {
-        suppressPullHintClick = true;
-        setTimeout(() => {
-          suppressPullHintClick = false;
-        }, 480);
-        doRefresh();
-      } else {
-        hint.textContent = '下拉刷新';
-      }
-    },
-    { passive: true }
-  );
-  window.addEventListener(
-    'touchcancel',
-    () => {
-      touchPulling = false;
-      if (!isRefreshing && hint) hint.textContent = '下拉刷新';
-    },
-    { passive: true }
-  );
+  attachWheelPullRefresh(section);
 }
 
 function initImagesPage() {

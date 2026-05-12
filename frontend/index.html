@@ -81,15 +81,21 @@
           aria-labelledby="imagesTitle"
         >
           <header class="panel-head-strip">
-            <p id="pullHint" class="pull-hint" title="页面置顶时可下拉或按住拖拽刷新；亦可点击">
-              下拉刷新
+            <p
+              id="pullHint"
+              class="pull-hint"
+              title="页面置顶时：可下拉/拖拽、向上滚动滚轮多次或点击此处刷新"
+            >
+              下拉或滚轮刷新
             </p>
             <h2 id="imagesTitle">镜像文件</h2>
           </header>
           <div
             id="releaseNotesBlock"
             class="release-notes-block release-notes-block--in-panel hidden"
-          ></div>
+          >
+            <div id="releaseNotesInner" class="announcement-md"></div>
+          </div>
           <div id="imagesList" class="images-list images-list--panel">
             <p class="hint">加载中...</p>
           </div>
