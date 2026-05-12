@@ -56,7 +56,7 @@ async fn shutdown_signal() {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let config = Arc::new(config::Config::load()?);
-    let mut storage = storage::Storage::new(config.uploads_dir.clone());
+    let storage = storage::Storage::new(config.uploads_dir.clone());
     storage.migrate_stable_flat_files().await?;
     storage.ensure_stable_category("default").await?;
     let storage = Arc::new(storage);
