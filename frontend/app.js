@@ -297,6 +297,14 @@ function schedulePrefetchUntilScrollable() {
     .catch(() => {});
 }
 
+/** 滚轮 delta 转为像素（兼容 deltaMode） */
+function wheelEventVerticalPixels(e, viewportPx) {
+  let dy = e.deltaY;
+  if (e.deltaMode === 1) dy *= 16;
+  else if (e.deltaMode === 2) dy *= Math.max(120, viewportPx);
+  return dy;
+}
+
 /** 「全部镜像」模式下：列表滚到底或底部继续向下滚轮时加载更早日期 */
 function setupImagesListInfiniteScroll() {
   const scrollEl = document.getElementById('imagesListScroll');
@@ -320,20 +328,58 @@ function setupImagesListInfiniteScroll() {
 
   scrollEl.addEventListener('scroll', tryLoadMore, { passive: true });
 
+  /**
+   * 部分浏览器不把 wheel 交给嵌套的 overflow 子容器，导致列表内滚轮无响应。
+   * 使用非 passive 监听，在容器内自行滚动并在触底时加载更多。
+   */
   scrollEl.addEventListener(
     'wheel',
     (e) => {
-      if (!dateSelect || dateSelect.value) return;
-      if (isLoadingAll) return;
-      const wrap = document.getElementById('loadMoreWrap');
-      if (!wrap || wrap.classList.contains('hidden')) return;
-      if (e.deltaY <= 0) return;
-      const room = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
-      if (room <= 36) {
-        loadAllImages(allImagesOffset, false);
+      if (e.ctrlKey) return;
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.15) return;
+
+      const dy = wheelEventVerticalPixels(e, scrollEl.clientHeight);
+      if (Math.abs(dy) < 0.25) return;
+
+      const tol = 2;
+      const maxScroll = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+      const top = scrollEl.scrollTop;
+
+      const goingDown = dy > 0;
+      const goingUp = dy < 0;
+
+      if (goingDown && top < maxScroll - tol) {
+        e.preventDefault();
+        scrollEl.scrollTop = Math.min(maxScroll, top + dy);
+        return;
+      }
+
+      if (goingUp && top > tol) {
+        e.preventDefault();
+        scrollEl.scrollTop = Math.max(0, top + dy);
+        return;
+      }
+
+      const allMode = dateSelect && !dateSelect.value;
+
+      if (goingDown && allMode && maxScroll <= tol) {
+        const wrap = document.getElementById('loadMoreWrap');
+        if (wrap && !wrap.classList.contains('hidden') && !isLoadingAll) {
+          e.preventDefault();
+          loadAllImages(allImagesOffset, false);
+        }
+        return;
+      }
+
+      if (goingDown && allMode && maxScroll > 0 && top >= maxScroll - tol) {
+        const wrap = document.getElementById('loadMoreWrap');
+        if (wrap && !wrap.classList.contains('hidden') && !isLoadingAll) {
+          e.preventDefault();
+          loadAllImages(allImagesOffset, false);
+        }
       }
     },
-    { passive: true }
+    { passive: false }
   );
 }
 

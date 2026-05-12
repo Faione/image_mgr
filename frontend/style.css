@@ -213,6 +213,7 @@ body {
   height: min(520px, max(260px, 52vh));
   overflow-x: hidden;
   overflow-y: scroll;
+  touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
