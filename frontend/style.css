@@ -259,7 +259,7 @@ main {
 
 .app-with-sidebar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(156px, clamp(168px, 13vw, 220px));
+  grid-template-columns: minmax(0, 1fr) minmax(188px, clamp(220px, 19vw, 300px));
   column-gap: clamp(2rem, 4vw, 3.75rem);
   row-gap: var(--stack-gap);
   width: 100%;
