@@ -27,21 +27,58 @@ async function fetchJSON(url) {
   return r.json();
 }
 
+let announcementMarkdownInited = false;
+function ensureAnnouncementMarkdown() {
+  if (announcementMarkdownInited) return;
+  announcementMarkdownInited = true;
+  if (typeof marked !== 'undefined' && marked.setOptions) {
+    marked.setOptions({
+      mangle: false,
+      headerIds: false,
+      breaks: true,
+    });
+  }
+}
+
+function announcementPlainFallback(md) {
+  const div = document.createElement('div');
+  div.textContent = md;
+  return `<p class="announcement-fallback">${div.innerHTML.replace(/\n/g, '<br>')}</p>`;
+}
+
+function renderAnnouncementMarkdown(md) {
+  ensureAnnouncementMarkdown();
+  if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+    try {
+      const html = marked.parse(md);
+      if (typeof DOMPurify !== 'undefined') {
+        return DOMPurify.sanitize(html);
+      }
+      return html;
+    } catch (_) {
+      /* fall through */
+    }
+  }
+  return announcementPlainFallback(md);
+}
+
 async function loadAnnouncement() {
   const bar = document.getElementById('announcementBar');
-  if (!bar) return;
+  const inner = document.getElementById('announcementBarInner');
+  if (!bar || !inner) return;
   try {
     const r = await fetch(`${API}/announcement`);
     const data = r.ok ? await r.json() : {};
     const t = (data.content || '').trim();
     if (t) {
-      bar.textContent = t;
+      inner.innerHTML = renderAnnouncementMarkdown(t);
       bar.classList.remove('hidden');
     } else {
-      bar.textContent = '';
+      inner.innerHTML = '';
       bar.classList.add('hidden');
     }
   } catch (_) {
+    inner.innerHTML = '';
     bar.classList.add('hidden');
   }
 }
@@ -574,12 +611,16 @@ function bindDeleteButtons(root) {
   });
 }
 
-/** 当前页面是否在「顶部」附近（兼容 document / body / scrollingElement） */
+/** 当前页面滚动偏移（pageYOffset 优先，避免仅用 scrollY 在个别环境下的偏差） */
 function getPageScrollTop() {
-  const root = document.scrollingElement || document.documentElement;
-  return (
-    window.scrollY || root.scrollTop || document.body.scrollTop || 0
-  );
+  const se = document.scrollingElement || document.documentElement;
+  const y =
+    window.pageYOffset ??
+    window.scrollY ??
+    se.scrollTop ??
+    document.body.scrollTop ??
+    0;
+  return typeof y === 'number' ? y : 0;
 }
 
 function canTriggerPullRefresh(section) {
@@ -589,11 +630,12 @@ function canTriggerPullRefresh(section) {
   return true;
 }
 
-/** 从按钮、链接、表单控件开始的触摸不当作下拉手势，避免误触发 */
-function shouldIgnorePullTouchTarget(target) {
+/** 从按钮、链接、表单控件开始的指针不当作下拉手势；右侧固定栏内手势不参与（避免与栏内滚动冲突） */
+function shouldIgnorePullPointerTarget(target) {
   if (!target || !target.closest) return false;
   const el = target.nodeType === Node.TEXT_NODE ? target.parentElement : target;
   if (!el) return false;
+  if (el.closest('.right-sidebar')) return true;
   return !!el.closest(
     'button, a, input, select, textarea, label, [role="button"], option'
   );
@@ -636,6 +678,7 @@ function setupPullRefresh() {
   pullRefreshBound = true;
   let startY = 0;
   let pulling = false;
+  let activePointerId = null;
 
   hint.addEventListener('click', (e) => {
     if (suppressPullHintClick) {
@@ -645,41 +688,45 @@ function setupPullRefresh() {
     doRefresh();
   });
 
-  const onTouchStart = (e) => {
-    if (!e.touches || e.touches.length !== 1) return;
-    if (!canTriggerPullRefresh(section) || isRefreshing) {
-      pulling = false;
-      return;
-    }
-    if (shouldIgnorePullTouchTarget(e.target)) {
-      pulling = false;
-      return;
-    }
+  const tryArmPull = (e) => {
+    if (!e.isPrimary) return false;
+    if (e.pointerType === 'mouse' && e.button !== 0) return false;
+    if (!canTriggerPullRefresh(section) || isRefreshing) return false;
+    if (shouldIgnorePullPointerTarget(e.target)) return false;
+    activePointerId = e.pointerId;
     pulling = true;
-    startY = e.touches[0].clientY;
+    startY = e.clientY;
+    return true;
   };
 
-  const onTouchMove = (e) => {
+  const onPointerDown = (e) => {
+    tryArmPull(e);
+  };
+
+  const onPointerMove = (e) => {
+    if (activePointerId == null || e.pointerId !== activePointerId) return;
     if (!pulling || isRefreshing) return;
     if (!canTriggerPullRefresh(section)) {
       pulling = false;
+      activePointerId = null;
       hint.textContent = '下拉刷新';
       return;
     }
-    if (!e.touches || e.touches.length < 1) return;
-    if (e.touches[0].clientY - startY > 30) {
+    if (e.clientY - startY > 28) {
       hint.textContent = '释放刷新';
     } else {
       hint.textContent = '下拉刷新';
     }
   };
 
-  const onTouchEnd = (e) => {
-    if (!pulling || isRefreshing) return;
+  const onPointerUp = (e) => {
+    if (activePointerId == null || e.pointerId !== activePointerId) return;
+    const wasPulling = pulling;
     pulling = false;
-    const t = e.changedTouches && e.changedTouches[0];
-    const endY = t ? t.clientY : startY;
-    if (endY - startY > 60) {
+    activePointerId = null;
+    if (!wasPulling || isRefreshing) return;
+    const endY = e.clientY;
+    if (endY - startY > 48) {
       suppressPullHintClick = true;
       setTimeout(() => {
         suppressPullHintClick = false;
@@ -690,15 +737,82 @@ function setupPullRefresh() {
     }
   };
 
-  const onTouchCancel = () => {
+  const onPointerCancel = (e) => {
+    if (activePointerId == null || e.pointerId !== activePointerId) return;
+    activePointerId = null;
     pulling = false;
     if (!isRefreshing && hint) hint.textContent = '下拉刷新';
   };
 
-  window.addEventListener('touchstart', onTouchStart, { passive: true });
-  window.addEventListener('touchmove', onTouchMove, { passive: true });
-  window.addEventListener('touchend', onTouchEnd, { passive: true });
-  window.addEventListener('touchcancel', onTouchCancel, { passive: true });
+  if (window.PointerEvent) {
+    window.addEventListener('pointerdown', onPointerDown, { passive: true });
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerup', onPointerUp, { passive: true });
+    window.addEventListener('pointercancel', onPointerCancel, { passive: true });
+    return;
+  }
+
+  let touchStartY = 0;
+  let touchPulling = false;
+  window.addEventListener(
+    'touchstart',
+    (ev) => {
+      if (!ev.touches || ev.touches.length !== 1) return;
+      if (!canTriggerPullRefresh(section) || isRefreshing) {
+        touchPulling = false;
+        return;
+      }
+      if (shouldIgnorePullPointerTarget(ev.target)) {
+        touchPulling = false;
+        return;
+      }
+      touchPulling = true;
+      touchStartY = ev.touches[0].clientY;
+    },
+    { passive: true }
+  );
+  window.addEventListener(
+    'touchmove',
+    (ev) => {
+      if (!touchPulling || isRefreshing) return;
+      if (!canTriggerPullRefresh(section)) {
+        touchPulling = false;
+        hint.textContent = '下拉刷新';
+        return;
+      }
+      if (!ev.touches || ev.touches.length < 1) return;
+      if (ev.touches[0].clientY - touchStartY > 28) hint.textContent = '释放刷新';
+      else hint.textContent = '下拉刷新';
+    },
+    { passive: true }
+  );
+  window.addEventListener(
+    'touchend',
+    (ev) => {
+      if (!touchPulling || isRefreshing) return;
+      touchPulling = false;
+      const t = ev.changedTouches && ev.changedTouches[0];
+      const endY = t ? t.clientY : touchStartY;
+      if (endY - touchStartY > 48) {
+        suppressPullHintClick = true;
+        setTimeout(() => {
+          suppressPullHintClick = false;
+        }, 480);
+        doRefresh();
+      } else {
+        hint.textContent = '下拉刷新';
+      }
+    },
+    { passive: true }
+  );
+  window.addEventListener(
+    'touchcancel',
+    () => {
+      touchPulling = false;
+      if (!isRefreshing && hint) hint.textContent = '下拉刷新';
+    },
+    { passive: true }
+  );
 }
 
 function initImagesPage() {

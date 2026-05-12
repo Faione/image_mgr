@@ -21,7 +21,9 @@
       class="announcement-bar hidden"
       role="status"
       aria-live="polite"
-    ></div>
+    >
+      <div id="announcementBarInner" class="announcement-md"></div>
+    </div>
 
     <main id="app" class="app-with-sidebar">
       <div class="main-content">
@@ -47,7 +49,11 @@
               </p>
               <h3>置顶公告</h3>
               <div class="form-row">
-                <textarea id="adminAnnouncement" rows="3" placeholder="网站顶部公告"></textarea>
+                <textarea
+                  id="adminAnnouncement"
+                  rows="6"
+                  placeholder="支持 Markdown（标题、列表、链接、代码块等）"
+                ></textarea>
               </div>
               <button type="button" id="adminAnnouncementSave">保存公告</button>
               <p class="hint admin-hint-after">
@@ -75,7 +81,9 @@
           aria-labelledby="imagesTitle"
         >
           <header class="panel-head-strip">
-            <p id="pullHint" class="pull-hint" title="点击刷新">下拉刷新</p>
+            <p id="pullHint" class="pull-hint" title="页面置顶时可下拉或按住拖拽刷新；亦可点击">
+              下拉刷新
+            </p>
             <h2 id="imagesTitle">镜像文件</h2>
           </header>
           <div
@@ -157,6 +165,8 @@
       </aside>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
     <script src="/static/app.js"></script>
   </body>
 </html>
