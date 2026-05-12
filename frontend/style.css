@@ -204,7 +204,22 @@ body {
   color: var(--text);
 }
 
-.release-notes-block--in-panel:not(.hidden) + .images-list--panel {
+.release-notes-block--in-panel:not(.hidden) + .images-list-scroll {
+  border-top: none;
+}
+
+.images-list-scroll {
+  max-height: min(480px, 52vh);
+  min-height: 200px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.images-list-scroll .images-list--panel {
   border-top: none;
 }
 .release-notes-block.hidden {

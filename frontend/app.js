@@ -228,6 +228,7 @@ async function loadImages(date) {
   const title = document.getElementById('imagesTitle');
   const loadMoreWrap = document.getElementById('loadMoreWrap');
   loadMoreWrap.classList.add('hidden');
+  resetImagesListScrollTop();
 
   if (date) {
     title.textContent = `镜像文件 - ${date}`;
@@ -263,6 +264,53 @@ let pullRefreshBound = false;
 /** 避免移动端 touchend 触发刷新后又合成 click 重复执行 */
 let suppressPullHintClick = false;
 let refreshResetTimer = null;
+/** 镜像列表无限滚动是否已绑定 */
+let imagesListScrollBound = false;
+
+function resetImagesListScrollTop() {
+  const scrollEl = document.getElementById('imagesListScroll');
+  if (scrollEl) scrollEl.scrollTop = 0;
+}
+
+/** 「全部镜像」模式下：列表滚到底或底部继续向下滚轮时加载更早日期 */
+function setupImagesListInfiniteScroll() {
+  const scrollEl = document.getElementById('imagesListScroll');
+  const dateSelect = document.getElementById('dateSelect');
+  if (!scrollEl || imagesListScrollBound) return;
+  imagesListScrollBound = true;
+
+  const tryLoadMore = () => {
+    if (!dateSelect || dateSelect.value) return;
+    if (isLoadingAll) return;
+    const wrap = document.getElementById('loadMoreWrap');
+    if (!wrap || wrap.classList.contains('hidden')) return;
+    const threshold = 72;
+    if (
+      scrollEl.scrollTop + scrollEl.clientHeight >=
+      scrollEl.scrollHeight - threshold
+    ) {
+      loadAllImages(allImagesOffset, false);
+    }
+  };
+
+  scrollEl.addEventListener('scroll', tryLoadMore, { passive: true });
+
+  scrollEl.addEventListener(
+    'wheel',
+    (e) => {
+      if (!dateSelect || dateSelect.value) return;
+      if (isLoadingAll) return;
+      const wrap = document.getElementById('loadMoreWrap');
+      if (!wrap || wrap.classList.contains('hidden')) return;
+      if (e.deltaY <= 0) return;
+      const room = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+      if (room <= 8) {
+        loadAllImages(allImagesOffset, false);
+      }
+    },
+    { passive: true }
+  );
+}
 
 async function loadAllImages(offset, replace) {
   const list = document.getElementById('imagesList');
@@ -276,7 +324,10 @@ async function loadAllImages(offset, replace) {
     loadMoreBtn.classList.add('is-loading');
     if (!replace) loadMoreBtn.textContent = '加载中';
   }
-  if (replace) list.innerHTML = '<p class="hint">加载中...</p>';
+  if (replace) {
+    resetImagesListScrollTop();
+    list.innerHTML = '<p class="hint">加载中...</p>';
+  }
 
   try {
     await ensureDownloadStats();
@@ -640,6 +691,7 @@ function shouldIgnorePullPointerTarget(target) {
   if (!target || !target.closest) return false;
   const el = target.nodeType === Node.TEXT_NODE ? target.parentElement : target;
   if (!el) return false;
+  if (el.closest('#imagesListScroll')) return true;
   if (el.closest('.right-sidebar')) return true;
   return !!el.closest(
     'button, a, input, select, textarea, label, [role="button"], option'
@@ -658,6 +710,7 @@ function shouldIgnoreWheelPullTarget(target) {
   if (!target || !target.closest) return false;
   const el = target.nodeType === Node.TEXT_NODE ? target.parentElement : target;
   if (!el) return false;
+  if (el.closest('#imagesListScroll')) return true;
   if (el.closest('.right-sidebar')) return true;
   return !!el.closest(
     'textarea, input, select, [contenteditable="true"], .build-log'
@@ -895,6 +948,7 @@ function initImagesPage() {
   };
   loadImages(''); // 默认加载全部
   setupPullRefresh();
+  setupImagesListInfiniteScroll();
 
   document.getElementById('loadMoreBtn').onclick = () => {
     if (select.value) return;
