@@ -266,10 +266,35 @@ let suppressPullHintClick = false;
 let refreshResetTimer = null;
 /** 镜像列表无限滚动是否已绑定 */
 let imagesListScrollBound = false;
+/** 串行执行「补满列表可视高度」预加载，避免并发触发 */
+let imagesListPrefetchChain = Promise.resolve();
 
 function resetImagesListScrollTop() {
   const scrollEl = document.getElementById('imagesListScroll');
   if (scrollEl) scrollEl.scrollTop = 0;
+}
+
+/**
+ * 首屏内容若不足以撑满列表可视高度，则无法滚动触底加载更早镜像；
+ * 在仍有下一页时自动连续加载直至出现纵向溢出或无更多数据。
+ */
+async function fillImagesListUntilScrollableOrDone() {
+  const scrollEl = document.getElementById('imagesListScroll');
+  const dateSelect = document.getElementById('dateSelect');
+  const slack = 24;
+  for (let i = 0; i < 24; i++) {
+    if (!scrollEl || dateSelect?.value) return;
+    const wrap = document.getElementById('loadMoreWrap');
+    if (!wrap || wrap.classList.contains('hidden')) return;
+    if (scrollEl.scrollHeight > scrollEl.clientHeight + slack) return;
+    await loadAllImages(allImagesOffset, false);
+  }
+}
+
+function schedulePrefetchUntilScrollable() {
+  imagesListPrefetchChain = imagesListPrefetchChain
+    .then(() => fillImagesListUntilScrollableOrDone())
+    .catch(() => {});
 }
 
 /** 「全部镜像」模式下：列表滚到底或底部继续向下滚轮时加载更早日期 */
@@ -304,7 +329,7 @@ function setupImagesListInfiniteScroll() {
       if (!wrap || wrap.classList.contains('hidden')) return;
       if (e.deltaY <= 0) return;
       const room = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
-      if (room <= 8) {
+      if (room <= 36) {
         loadAllImages(allImagesOffset, false);
       }
     },
@@ -356,6 +381,11 @@ async function loadAllImages(offset, replace) {
     }
 
     loadMoreWrap.classList.toggle('hidden', !data.has_more);
+
+    const dsPrefetch = document.getElementById('dateSelect');
+    if (!dsPrefetch?.value && data.has_more) {
+      schedulePrefetchUntilScrollable();
+    }
   } catch (e) {
     if (replace) list.innerHTML = '<p class="hint">加载失败</p>';
   } finally {
